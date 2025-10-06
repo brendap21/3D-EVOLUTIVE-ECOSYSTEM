@@ -30,45 +30,34 @@ DOWN       | Bajar cámara (eje Y positivo)
 
 ## Estructura del Proyecto
 
-3D-Evolutive-Ecosystem/
-│
-├─ src/
-│  ├─ main/
-│  │  ├─ EcosistemaApp.java
-│  │  ├─ RenderPanel.java
-│  │  ├─ RenderThread.java
-│  │  └─ Renderable.java
-│  │
-│  ├─ entities/
-│  │  ├─ Cubo.java
-│  │  ├─ Cilindro.java
-│  │  └─ Curva.java
-│  │
-│  ├─ math/
-│  │  ├─ Camera.java
-│  │  ├─ Matrix4.java
-│  │  ├─ Transform.java
-│  │  └─ Vector3.java
-│  │
-│  ├─ render/
-│  │  └─ SoftwareRenderer.java
-│  │
-│  └─ ui/
-│     └─ Controles.java
-│
-└─ README.md
+- 3D-Evolutive-Ecosystem/
+- │
+- ├─ src/
+- │  ├─ main/
+- │  │  ├─ EcosistemaApp.java
+- │  │  ├─ RenderPanel.java
+- │  │  ├─ RenderThread.java
+- │  │  └─ Renderable.java
+- │  │
+- │  ├─ entities/
+- │  │  ├─ Cubo.java
+- │  │  ├─ Cilindro.java
+- │  │  └─ Curva.java
+- │  │
+- │  ├─ math/
+- │  │  ├─ Camera.java
+- │  │  ├─ Matrix4.java
+- │  │  ├─ Transform.java
+- │  │  └─ Vector3.java
+- │  │
+- │  ├─ render/
+- │  │  └─ SoftwareRenderer.java
+- │  │
+- │  └─ ui/
+- │     └─ Controles.java
+- │
+- └─ README.md
 
-## Dependencias
-
-- Java SE 8+ (compatible con versiones superiores)
-- No requiere librerías externas
-
-## Compilación y Ejecución
-
-Desde la consola, en la raíz del proyecto:
-
-javac -d bin src/main/*.java src/entities/*.java src/math/*.java src/ui/*.java src/render/*.java
-java -cp bin main.EcosistemaApp
 
 ## Uso y Extensiones
 
@@ -77,16 +66,10 @@ java -cp bin main.EcosistemaApp
 - Ajustar el FOV de la cámara en Camera para cambiar la perspectiva.
 - Implementar más formas geométricas (esferas, pirámides, etc.) usando SoftwareRenderer.
 
-## Créditos
+## Compilación y Ejecución
 
-- Desarrollado por Brenda Navarro
-- Proyecto de práctica para la materia Gráficas por Computadora 2D y 3D en el CETI Colomos.
+Desde la consola, en la raíz del proyecto:
 
-## Estado del Proyecto
+- javac -d bin src/main/*.java src/entities/*.java src/math/*.java src/ui/*.java src/render/*.java
+- java -cp bin main.EcosistemaApp
 
-- Funcional: Cubos y cilindros renderizados en 3D
-- Controles: WASD/UP/DOWN para movimiento de cámara
-- Mejoras posibles:
-  - Animaciones automáticas de objetos
-  - Luz y sombreado básico
-  - Interfaz gráfica para agregar/eliminar entidades en tiempo real
