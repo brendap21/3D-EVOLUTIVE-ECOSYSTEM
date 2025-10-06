@@ -20,6 +20,15 @@ public class SoftwareRenderer {
         return buffer;
     }
 
+    public void clear(Color c){
+        int rgb = c.getRGB();
+        for(int y=0;y<alto;y++){
+            for(int x=0;x<ancho;x++){
+                buffer.setRGB(x, y, rgb);
+            }
+        }
+    }
+
     public double[] project(Vector3 point, Camera cam) {
         Vector3 p = point.sub(cam.getPosicion());
         double scale = cam.getFov() / p.z;
@@ -53,7 +62,6 @@ public class SoftwareRenderer {
         }
     }
 
-    // Método para dibujar un cubo simple conectando 8 vértices
     public void drawCube(Vector3[] vertices, Camera cam, Color color){
         int[][] edges = {
             {0,1},{1,2},{2,3},{3,0},
@@ -75,16 +83,53 @@ public class SoftwareRenderer {
         }
     }
 
-    public Vector3 transform(Vector3 v, Matrix4 m){
-        return m.multiply(v);
+    // ---------------------- Nuevos métodos ----------------------
+    
+    public Vector3[] getCubeVertices(Vector3 pos, int tam, double rotY){
+        double half = tam / 2.0;
+        Vector3[] vertices = new Vector3[8];
+        double[][] offsets = {
+            {-half,-half,-half},{half,-half,-half},{half,half,-half},{-half,half,-half},
+            {-half,-half,half},{half,-half,half},{half,half,half},{-half,half,half}
+        };
+        double cos = Math.cos(rotY), sin = Math.sin(rotY);
+
+        for(int i=0;i<8;i++){
+            double x = offsets[i][0], y = offsets[i][1], z = offsets[i][2];
+            double xr = x * cos - z * sin;
+            double zr = x * sin + z * cos;
+            vertices[i] = new Vector3(pos.x + xr, pos.y + y, pos.z + zr);
+        }
+        return vertices;
     }
 
-    public void clear(Color c){
-        int rgb = c.getRGB();
-        for(int y=0;y<alto;y++){
-            for(int x=0;x<ancho;x++){
-                buffer.setRGB(x, y, rgb);
-            }
+    public Vector3[] getCylinderTopVertices(Vector3 pos, int radio, int altura, double rotY){
+        int sides = 20; // cantidad de segmentos del cilindro
+        Vector3[] top = new Vector3[sides];
+        double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        for(int i=0;i<sides;i++){
+            double angle = 2*Math.PI*i/sides;
+            double x = radio * Math.cos(angle);
+            double z = radio * Math.sin(angle);
+            double xr = x * cos - z * sin;
+            double zr = x * sin + z * cos;
+            top[i] = new Vector3(pos.x + xr, pos.y + altura/2.0, pos.z + zr);
         }
+        return top;
+    }
+
+    public Vector3[] getCylinderBottomVertices(Vector3 pos, int radio, int altura, double rotY){
+        int sides = 20;
+        Vector3[] bottom = new Vector3[sides];
+        double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        for(int i=0;i<sides;i++){
+            double angle = 2*Math.PI*i/sides;
+            double x = radio * Math.cos(angle);
+            double z = radio * Math.sin(angle);
+            double xr = x * cos - z * sin;
+            double zr = x * sin + z * cos;
+            bottom[i] = new Vector3(pos.x + xr, pos.y - altura/2.0, pos.z + zr);
+        }
+        return bottom;
     }
 }

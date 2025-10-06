@@ -6,29 +6,25 @@ import math.Camera;
 
 public class RenderThread extends Thread {
     private RenderPanel panel;
-    private List<Renderable> entidades;
+    private List<Renderable> objetos;
     private Camera cam;
-    private boolean running = true;
 
-    public RenderThread(RenderPanel panel, List<Renderable> entidades, Camera cam){
+    public RenderThread(RenderPanel panel, List<Renderable> objetos, Camera cam){
         this.panel = panel;
-        this.entidades = entidades;
+        this.objetos = objetos;
         this.cam = cam;
     }
 
     @Override
-    public void run() {
-        while(running){
-            panel.render(entidades, cam);
-            try{
-                Thread.sleep(16); // ~60 FPS
-            }catch(InterruptedException e){
-                e.printStackTrace();
+    public void run(){
+        while(true){
+            for(Renderable e : objetos){
+                e.update(); // Actualiza rotación
             }
+            panel.render(objetos, cam);
+            try {
+                Thread.sleep(16); // ~60 FPS
+            } catch (InterruptedException ex){}
         }
-    }
-
-    public void stopRunning(){
-        running = false;
     }
 }

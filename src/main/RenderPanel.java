@@ -1,34 +1,28 @@
 package main;
 
 import javax.swing.JPanel;
-import java.awt.image.BufferedImage;
-import java.util.List;
+import java.awt.Color;
 import render.SoftwareRenderer;
-import math.Camera;
 import entities.Renderable;
+import math.Camera;
+import java.util.List;
 
 public class RenderPanel extends JPanel {
-    private SoftwareRenderer renderer;
     private int ancho, alto;
+    private SoftwareRenderer renderer;
 
-    public RenderPanel(int ancho, int alto) {
+    public RenderPanel(int ancho, int alto){
         this.ancho = ancho;
         this.alto = alto;
-        this.renderer = new SoftwareRenderer(ancho, alto);
+        renderer = new SoftwareRenderer(ancho, alto);
     }
 
-    public void render(List<Renderable> entidades, Camera cam){
-        renderer.clear(java.awt.Color.BLACK);
-
-        for(Renderable e : entidades){
+    public void render(List<Renderable> objetos, Camera cam){
+        renderer.clear(Color.BLACK);
+        for(Renderable e : objetos){
             e.render(renderer, cam);
         }
-
         repaint();
-    }
-
-    public BufferedImage getBuffer() {
-        return renderer.getBuffer();
     }
 
     @Override
