@@ -18,7 +18,7 @@ public class EcosistemaApp {
 
         RenderPanel panel = new RenderPanel(ancho, alto);
 
-        JFrame frame = new JFrame("Ecosistema 3D");
+        JFrame frame = new JFrame("3D EVOLUTIVE ECOSYSTEM");
         frame.setSize(ancho, alto);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.add(panel);
