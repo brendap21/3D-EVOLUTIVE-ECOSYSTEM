@@ -5,7 +5,6 @@ import java.awt.event.KeyEvent;
 import math.Camera;
 import math.Vector3;
 
-
 public class Controles extends KeyAdapter {
 
     private Camera cam;
@@ -29,17 +28,15 @@ public class Controles extends KeyAdapter {
     }
 
     public void actualizar() {
-        // Obtenemos la posición actual de la cámara
-        Vector3 pos = cam.getPosicion();
+        Vector3 dir = new Vector3(0, 0, 0);
 
-        if (teclas[KeyEvent.VK_W]) pos.z += velocidad;
-        if (teclas[KeyEvent.VK_S]) pos.z -= velocidad;
-        if (teclas[KeyEvent.VK_A]) pos.x -= velocidad;
-        if (teclas[KeyEvent.VK_D]) pos.x += velocidad;
-        if (teclas[KeyEvent.VK_Q]) pos.y += velocidad;
-        if (teclas[KeyEvent.VK_E]) pos.y -= velocidad;
+        if(teclas[KeyEvent.VK_W]) dir = dir.add(cam.getForward().scale(velocidad));
+        if(teclas[KeyEvent.VK_S]) dir = dir.subtract(cam.getForward().scale(velocidad));
+        if(teclas[KeyEvent.VK_D]) dir = dir.subtract(cam.getRight().scale(velocidad));
+        if(teclas[KeyEvent.VK_A]) dir = dir.add(cam.getRight().scale(velocidad));
+        if(teclas[KeyEvent.VK_DOWN]) dir = dir.add(new Vector3(0, velocidad, 0));
+        if(teclas[KeyEvent.VK_UP]) dir = dir.subtract(new Vector3(0, velocidad, 0));
 
-        // Actualizamos la posición en la cámara
-        cam.setPosicion(pos);
+        cam.setPosicion(cam.getPosicion().add(dir));
     }
 }

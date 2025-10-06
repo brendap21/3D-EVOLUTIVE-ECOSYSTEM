@@ -1,8 +1,6 @@
 package main;
 
 import javax.swing.JFrame;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import math.Camera;
@@ -10,6 +8,7 @@ import math.Vector3;
 import entities.Cubo;
 import entities.Cilindro;
 import java.awt.Color;
+import ui.Controles;
 
 public class EcosistemaApp {
     public static void main(String[] args){
@@ -29,19 +28,10 @@ public class EcosistemaApp {
         entidades.add(new Cubo(new Vector3(0,0,0), 50, Color.RED));
         entidades.add(new Cilindro(new Vector3(100,0,50), 20, 80, Color.BLUE));
 
-        frame.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e){
-                switch(e.getKeyCode()){
-                    case KeyEvent.VK_W -> cam.moveForward(5);
-                    case KeyEvent.VK_S -> cam.moveBackward(5);
-                    case KeyEvent.VK_A -> cam.moveLeft(5);
-                    case KeyEvent.VK_D -> cam.moveRight(5);
-                }
-            }
-        });
+        Controles controles = new Controles(cam);
+        frame.addKeyListener(controles);
 
-        RenderThread hilo = new RenderThread(panel, entidades, cam);
+        RenderThread hilo = new RenderThread(panel, entidades, cam, controles);
         hilo.start();
     }
 }

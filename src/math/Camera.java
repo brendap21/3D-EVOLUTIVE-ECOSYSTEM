@@ -19,6 +19,10 @@ public class Camera {
     public Vector3 getUp() { return up; }
     public double getFov() { return fov; }
 
+    public Vector3 getRight() {
+        return forward.cross(up).normalize();
+    }
+
     public void moveForward(double amount){
         posicion = posicion.add(forward.scale(amount));
     }
@@ -28,12 +32,10 @@ public class Camera {
     }
 
     public void moveRight(double amount){
-        Vector3 right = forward.cross(up).normalize();
-        posicion = posicion.add(right.scale(amount));
+        posicion = posicion.add(getRight().scale(amount));
     }
 
     public void moveLeft(double amount){
-        Vector3 right = forward.cross(up).normalize();
-        posicion = posicion.subtract(right.scale(amount));
+        posicion = posicion.subtract(getRight().scale(amount));
     }
 }
