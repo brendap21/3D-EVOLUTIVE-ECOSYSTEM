@@ -30,7 +30,7 @@ public class SoftwareRenderer {
     }
 
     public double[] project(Vector3 point, Camera cam) {
-        Vector3 p = point.sub(cam.getPosicion());
+        Vector3 p = point.subtract(cam.getPosicion());
         double scale = cam.getFov() / p.z;
         double x2d = p.x * scale + ancho/2.0;
         double y2d = p.y * scale + alto/2.0;

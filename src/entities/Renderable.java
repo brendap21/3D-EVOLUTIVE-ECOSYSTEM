@@ -1,9 +1,9 @@
-package entities;
+package main;
 
-import math.Camera;
 import render.SoftwareRenderer;
+import math.Camera;
 
 public interface Renderable {
     void render(SoftwareRenderer renderer, Camera cam);
-    void update(); // Método para animación
+    void update();
 }

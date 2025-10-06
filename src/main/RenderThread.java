@@ -1,30 +1,25 @@
 package main;
 
 import java.util.List;
-import entities.Renderable;
+import javax.swing.JFrame;
 import math.Camera;
 
 public class RenderThread extends Thread {
     private RenderPanel panel;
-    private List<Renderable> objetos;
+    private List<Renderable> entidades;
     private Camera cam;
 
-    public RenderThread(RenderPanel panel, List<Renderable> objetos, Camera cam){
+    public RenderThread(RenderPanel panel, List<Renderable> entidades, Camera cam){
         this.panel = panel;
-        this.objetos = objetos;
+        this.entidades = entidades;
         this.cam = cam;
     }
 
     @Override
     public void run(){
         while(true){
-            for(Renderable e : objetos){
-                e.update(); // Actualiza rotación
-            }
-            panel.render(objetos, cam);
-            try {
-                Thread.sleep(16); // ~60 FPS
-            } catch (InterruptedException ex){}
+            panel.render(entidades, cam);
+            try { Thread.sleep(16); } catch(Exception e){}
         }
     }
 }

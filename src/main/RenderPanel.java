@@ -1,11 +1,11 @@
 package main;
 
 import javax.swing.JPanel;
+import java.awt.image.BufferedImage;
 import java.awt.Color;
-import render.SoftwareRenderer;
-import entities.Renderable;
-import math.Camera;
 import java.util.List;
+import math.Camera;
+import render.SoftwareRenderer;
 
 public class RenderPanel extends JPanel {
     private int ancho, alto;
@@ -17,9 +17,10 @@ public class RenderPanel extends JPanel {
         renderer = new SoftwareRenderer(ancho, alto);
     }
 
-    public void render(List<Renderable> objetos, Camera cam){
+    public void render(List<Renderable> entidades, Camera cam){
         renderer.clear(Color.BLACK);
-        for(Renderable e : objetos){
+        for(Renderable e : entidades){
+            e.update();
             e.render(renderer, cam);
         }
         repaint();
