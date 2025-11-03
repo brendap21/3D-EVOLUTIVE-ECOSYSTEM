@@ -9,7 +9,9 @@ public class Transform {
 
         if(zRel == 0) zRel = 0.0001;
 
-        double fov = 500;
+        // Use camera's fov instead of a hardcoded value. Keep compatibility
+        // with existing code by treating fov as a scale factor.
+        double fov = cam.getFov();
         double x2d = (xRel * fov) / zRel + ancho / 2.0;
         double y2d = (yRel * fov) / zRel + alto / 2.0;
 

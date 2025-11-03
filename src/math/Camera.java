@@ -5,12 +5,16 @@ public class Camera {
     private Vector3 forward;
     private Vector3 up;
     private double fov;
+    private double yaw;   // rotation around Y axis
+    private double pitch; // rotation around X axis
 
     public Camera(Vector3 posicion, double fov){
         this.posicion = posicion;
         this.fov = fov;
         this.forward = new Vector3(0,0,1);
         this.up = new Vector3(0,1,0);
+        this.yaw = 0.0;
+        this.pitch = 0.0;
     }
 
     public Vector3 getPosicion() { return posicion; }
@@ -21,6 +25,46 @@ public class Camera {
 
     public Vector3 getRight() {
         return forward.cross(up).normalize();
+    }
+
+    // Rotate camera by yaw (radians) and pitch (radians). Pitch is clamped to avoid gimbal lock.
+    public void rotate(double deltaYaw, double deltaPitch){
+        yaw += deltaYaw;
+        pitch += deltaPitch;
+        double limit = Math.toRadians(89.0);
+        if(pitch > limit) pitch = limit;
+        if(pitch < -limit) pitch = -limit;
+
+        // Spherical coordinates -> forward vector
+        double cosPitch = Math.cos(pitch);
+        double fx = Math.sin(yaw) * cosPitch;
+        double fy = Math.sin(pitch);
+        double fz = Math.cos(yaw) * cosPitch;
+
+        this.forward = new Vector3(fx, fy, fz).normalize();
+        // keep up as world up for simplicity
+        this.up = new Vector3(0,1,0);
+    }
+
+    public double getYaw(){ return yaw; }
+    public double getPitch(){ return pitch; }
+
+    // Set absolute yaw and pitch (radians). Pitch will be clamped to avoid gimbal lock.
+    public void setOrientation(double newYaw, double newPitch){
+        this.yaw = newYaw;
+        double limit = Math.toRadians(89.0);
+        if(newPitch > limit) newPitch = limit;
+        if(newPitch < -limit) newPitch = -limit;
+        this.pitch = newPitch;
+
+        // Recompute forward vector from yaw/pitch
+        double cosPitch = Math.cos(pitch);
+        double fx = Math.sin(yaw) * cosPitch;
+        double fy = Math.sin(pitch);
+        double fz = Math.cos(yaw) * cosPitch;
+
+        this.forward = new Vector3(fx, fy, fz).normalize();
+        this.up = new Vector3(0,1,0);
     }
 
     public void moveForward(double amount){

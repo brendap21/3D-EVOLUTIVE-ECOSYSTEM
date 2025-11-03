@@ -20,10 +20,12 @@ public class RenderThread extends Thread {
     @Override
     public void run(){
         while(true){
-            // Actualiza controles antes de renderizar
-            if(controles != null) controles.actualizar();
+            // Actualiza controles antes de renderizar, pero sólo si no estamos en pausa.
+            // Cuando el juego está pausado queremos congelar la cámara y todas las
+            // actualizaciones dependientes del input.
+            if(controles != null && !controles.isPaused()) controles.actualizar();
 
-            panel.render(entidades, cam);
+            panel.render(entidades, cam, controles);
 
             try { Thread.sleep(16); } catch(Exception e){}
         }

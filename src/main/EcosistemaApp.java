@@ -28,8 +28,27 @@ public class EcosistemaApp {
         entidades.add(new Cubo(new Vector3(0,0,0), 50, Color.RED));
         entidades.add(new Cilindro(new Vector3(100,0,50), 20, 80, Color.BLUE));
 
-        Controles controles = new Controles(cam);
-        frame.addKeyListener(controles);
+        Controles controles = new Controles(cam, panel);
+        // Add listeners to the render panel so it receives mouse and key events
+        panel.addMouseMotionListener(controles);
+        panel.addKeyListener(controles);
+        panel.setFocusable(true);
+        panel.requestFocus();
+
+        // Click the panel to lock the mouse (enter mouse-look). When paused the
+        // panel will draw a pixel menu and route clicks to the menu; route clicks
+        // through the panel so it can handle pause-menu button hit-testing.
+        panel.addMouseListener(new java.awt.event.MouseAdapter(){
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e){
+                panel.handleMousePressed(e, controles);
+            }
+        });
+
+        // Lock mouse by default so behavior matches Minecraft (cursor hidden & centered,
+        // movement uses deltas to update yaw/pitch). If Robot is not available the method
+        // handles it gracefully.
+        controles.lockMouse(true);
 
         RenderThread hilo = new RenderThread(panel, entidades, cam, controles);
         hilo.start();
