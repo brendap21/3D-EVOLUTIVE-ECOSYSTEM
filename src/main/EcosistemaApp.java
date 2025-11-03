@@ -7,6 +7,8 @@ import math.Camera;
 import math.Vector3;
 import entities.Cubo;
 import entities.Cilindro;
+import entities.Terreno;
+import entities.Animal;
 import java.awt.Color;
 import ui.Controles;
 
@@ -24,11 +26,20 @@ public class EcosistemaApp {
         frame.add(panel);
         frame.setVisible(true);
 
-        List<Renderable> entidades = new ArrayList<>();
-        entidades.add(new Cubo(new Vector3(0,0,0), 50, Color.RED));
-        entidades.add(new Cilindro(new Vector3(100,0,50), 20, 80, Color.BLUE));
+    // Use Mundo to manage entities and animals
+    simulation.Mundo mundo = new simulation.Mundo();
+    mundo.addEntity(new Terreno(80, 80, 8.0, 12345L, new Color(60,140,60)));
+    mundo.addAnimal(new Animal(new Vector3(0, 10, 40), 1001L));
+    mundo.addAnimal(new Animal(new Vector3(-80, 10, 60), 2002L));
+    mundo.addAnimal(new Animal(new Vector3(80, 10, 20), 3003L));
+    // Decorative objects
+    mundo.addEntity(new Cubo(new Vector3(0,0,0), 50, Color.RED));
+    mundo.addEntity(new Cilindro(new Vector3(100,0,50), 20, 80, Color.BLUE));
 
         Controles controles = new Controles(cam, panel);
+    // Give controls and panel a reference to the world so they can save/load animals
+    controles.setMundoAndCorrectPosition(mundo);
+    panel.setMundo(mundo);
         // Add listeners to the render panel so it receives mouse and key events
         panel.addMouseMotionListener(controles);
         panel.addKeyListener(controles);
@@ -50,7 +61,12 @@ public class EcosistemaApp {
         // handles it gracefully.
         controles.lockMouse(true);
 
-        RenderThread hilo = new RenderThread(panel, entidades, cam, controles);
-        hilo.start();
+    // Start the renderer thread using the world's entity list
+    RenderThread hilo = new RenderThread(panel, mundo.getEntities(), cam, controles);
+    hilo.start();
+
+    // Start the simulation thread that mutates animals deterministically
+    simulation.Simulador sim = new simulation.Simulador(mundo, 5555L);
+    sim.start();
     }
 }

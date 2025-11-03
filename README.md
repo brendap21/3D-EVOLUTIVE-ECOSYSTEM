@@ -70,6 +70,6 @@ DOWN       | Bajar cámara (eje Y positivo)
 
 Desde la consola, en la raíz del proyecto:
 
-    javac -d bin src/main/*.java src/entities/*.java src/math/*.java src/ui/*.java src/render/*.java
+    javac -d bin src\main\*.java src\entities\*.java src\math\*.java src\ui\*.java src\render\*.java src\simulation\*.java
     java -cp bin main.EcosistemaApp
 

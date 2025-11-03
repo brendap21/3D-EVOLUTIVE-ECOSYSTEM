@@ -11,6 +11,8 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
 import java.awt.image.BufferedImage;
 import math.Camera;
+import simulation.Mundo;
+import java.io.File;
 import math.Vector3;
 
 // Controles mejorados: mouse-lock (centro + oculto) usando Robot y movimiento WASD
@@ -31,12 +33,15 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     private Cursor blankCursor;
     private boolean flyMode = true; // when true, W/S move along full forward vector (including Y)
     private boolean crosshairVisible = true;
+    private boolean debugOverlay = false; // toggled with F3
     // Pause state
     private boolean paused = false;
     // For free-look absolute mapping
     private double baseYaw = 0.0;
     private double basePitch = 0.0;
     private boolean freeLookBaseSet = false;
+    private Mundo mundo;
+    private double eyeHeight = 20.0; // camera eye offset above ground (shared) (increased for safety)
 
     public Controles(Camera cam, Component comp) {
         this.cam = cam;
@@ -50,6 +55,50 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         // Cursor invisible
         BufferedImage cursorImg = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
         blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0, 0), "blank cursor");
+    }
+
+    public void setMundo(Mundo m){ this.mundo = m; }
+
+    // When assigning the world, immediately ensure the camera is placed above terrain
+    public void setMundoAndCorrectPosition(Mundo m){
+        this.mundo = m;
+        if (this.mundo == null) return;
+
+        // Compute a safe Y so the camera is above the terrain (and any nearby collidable tops).
+        math.Vector3 pos = cam.getPosicion();
+        double startY = pos.y;
+        double safeY = startY;
+
+        // 1) terrain height at camera X,Z
+        double terrainH = this.mundo.getHeightAt(pos.x, pos.z);
+        if (terrainH != Double.NEGATIVE_INFINITY) {
+            safeY = Math.max(safeY, terrainH + eyeHeight + 1.0); // small buffer
+        }
+
+        // 2) consider collidables close to the camera (so we don't spawn inside a cube/cylinder)
+        double nearbyMargin = 16.0; // small margin around camera to consider
+        java.util.List<entities.Collidable> coll = this.mundo.getCollidables();
+        for (entities.Collidable c : coll) {
+            math.Vector3 min = c.getAABBMin();
+            math.Vector3 max = c.getAABBMax();
+            // check XZ proximity (camera near or above the object footprint)
+            if (pos.x + nearbyMargin < min.x || pos.x - nearbyMargin > max.x) continue;
+            if (pos.z + nearbyMargin < min.z || pos.z - nearbyMargin > max.z) continue;
+            // use top of AABB as required clearance
+            safeY = Math.max(safeY, max.y + eyeHeight + 1.0);
+        }
+
+            // Logging removed for production; startup positioning performed silently.
+
+        // Force camera to safe height at world assignment to avoid starting below the terrain.
+        if (terrainH != Double.NEGATIVE_INFINITY) {
+            double forcedY = terrainH + eyeHeight + 1.0;
+            cam.setPosicion(new math.Vector3(pos.x, forcedY, pos.z));
+        } else {
+            if (safeY > startY) {
+                cam.setPosicion(new math.Vector3(pos.x, safeY, pos.z));
+            }
+        }
     }
 
     // Lock or unlock the mouse. When locked, the cursor is hidden and recentred to the panel center.
@@ -87,9 +136,24 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         if (e.getKeyCode() == KeyEvent.VK_C) {
             crosshairVisible = !crosshairVisible;
         }
+        // Toggle debug overlay with F3
+        if (e.getKeyCode() == KeyEvent.VK_F3) {
+            debugOverlay = !debugOverlay;
+        }
         // Toggle pause with ESC: when paused, show the menu and stop the game updates.
         if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
             setPaused(!paused);
+        }
+        // When paused, allow quick save/load: 'S' = save, 'L' = load
+        if(paused && mundo != null){
+            if(e.getKeyCode() == KeyEvent.VK_S){
+                File f = new File("animals.txt");
+                simulation.Persistencia.saveAnimals(f, mundo.getAnimals());
+            }
+            if(e.getKeyCode() == KeyEvent.VK_L){
+                java.util.List<entities.Animal> loaded = simulation.Persistencia.loadAnimals(new File("animals.txt"));
+                for(entities.Animal a : loaded) mundo.addAnimal(a);
+            }
         }
     }
 
@@ -168,19 +232,18 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         if (flyMode) {
             Vector3 f = cam.getForward().normalize();
             // Use forward for W/S (includes Y). For strafing, keep horizontal right to avoid unintended vertical strafing.
-            double yaw = cam.getYaw();
-            double yawRight = yaw + Math.PI/2.0;
-            Vector3 rightXZ = new Vector3(Math.sin(yawRight), 0, Math.cos(yawRight)).normalize();
+            Vector3 right = cam.getRight();
+            Vector3 rightXZ = new Vector3(right.x, 0, right.z).normalize();
 
             if(teclas[KeyEvent.VK_W]) dir = dir.add(f.scale(velocidad));
             if(teclas[KeyEvent.VK_S]) dir = dir.subtract(f.scale(velocidad));
             if(teclas[KeyEvent.VK_D]) dir = dir.add(rightXZ.scale(velocidad));
             if(teclas[KeyEvent.VK_A]) dir = dir.subtract(rightXZ.scale(velocidad));
         } else {
-            double yaw = cam.getYaw();
-            Vector3 forwardXZ = new Vector3(Math.sin(yaw), 0, Math.cos(yaw)).normalize();
-            double yawRight = yaw + Math.PI/2.0;
-            Vector3 rightXZ = new Vector3(Math.sin(yawRight), 0, Math.cos(yawRight)).normalize();
+            Vector3 f2 = cam.getForward();
+            Vector3 forwardXZ = new Vector3(f2.x, 0, f2.z).normalize();
+            Vector3 right = cam.getRight();
+            Vector3 rightXZ = new Vector3(right.x, 0, right.z).normalize();
 
             if(teclas[KeyEvent.VK_W]) dir = dir.add(forwardXZ.scale(velocidad));
             if(teclas[KeyEvent.VK_S]) dir = dir.subtract(forwardXZ.scale(velocidad));
@@ -188,10 +251,71 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
             if(teclas[KeyEvent.VK_A]) dir = dir.subtract(rightXZ.scale(velocidad));
         }
 
-        if(teclas[KeyEvent.VK_DOWN] || teclas[KeyEvent.VK_CONTROL]) dir = dir.add(new Vector3(0, velocidad, 0));
-        if(teclas[KeyEvent.VK_UP] || teclas[KeyEvent.VK_SPACE]) dir = dir.subtract(new Vector3(0, velocidad, 0));
+        // Vertical movement: SPACE (or UP arrow) -> move up; CTRL (or DOWN arrow) -> move down
+        if(teclas[KeyEvent.VK_SPACE] || teclas[KeyEvent.VK_UP]) dir = dir.add(new Vector3(0, velocidad, 0));
+        if(teclas[KeyEvent.VK_CONTROL] || teclas[KeyEvent.VK_DOWN]) dir = dir.subtract(new Vector3(0, velocidad, 0));
 
-        cam.setPosicion(cam.getPosicion().add(dir));
+        // Attempted new position
+        Vector3 current = cam.getPosicion();
+        Vector3 attempted = current.add(dir);
+
+        // If there is no world, move freely
+        if (mundo == null) {
+            cam.setPosicion(attempted);
+            return;
+        }
+
+        // To avoid tunneling through collidables when movement is large per-frame,
+        // step the movement into smaller sub-steps and test collision at each step.
+        double dx = attempted.x - current.x;
+        double dy = attempted.y - current.y;
+        double dz = attempted.z - current.z;
+        double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        int steps = Math.max(1, (int)Math.ceil(dist / 4.0)); // step size ~4 units
+        double stepX = dx / steps;
+        double stepY = dy / steps;
+        double stepZ = dz / steps;
+
+        Vector3 posNow = current;
+        boolean moved = false;
+        for(int s=0; s<steps; s++){
+            Vector3 tryPos = new Vector3(posNow.x + stepX, posNow.y + stepY, posNow.z + stepZ);
+
+            // Enforce terrain collision at each step
+            double terrainH = mundo.getHeightAt(tryPos.x, tryPos.z);
+            if(terrainH != Double.NEGATIVE_INFINITY){
+                if(tryPos.y < terrainH + eyeHeight) tryPos = new Vector3(tryPos.x, terrainH + eyeHeight, tryPos.z);
+            }
+
+            // Sphere-AABB collision test
+            double camRadius = 8.0;
+            boolean colliding = false;
+            java.util.List<entities.Collidable> coll = mundo.getCollidables();
+            for(entities.Collidable c : coll){
+                math.Vector3 min = c.getAABBMin();
+                math.Vector3 max = c.getAABBMax();
+                double cx = Math.max(min.x, Math.min(tryPos.x, max.x));
+                double cy = Math.max(min.y, Math.min(tryPos.y, max.y));
+                double cz = Math.max(min.z, Math.min(tryPos.z, max.z));
+                double ddx = tryPos.x - cx;
+                double ddy = tryPos.y - cy;
+                double ddz = tryPos.z - cz;
+                double dist2 = ddx*ddx + ddy*ddy + ddz*ddz;
+                if(dist2 < camRadius*camRadius){ colliding = true; break; }
+            }
+
+            if(colliding){
+                // stop movement on collision (simple response); don't apply this sub-step
+                break;
+            } else {
+                posNow = tryPos;
+                moved = true;
+            }
+        }
+
+        if(moved){
+            cam.setPosicion(posNow);
+        }
     }
 
     public boolean isPaused(){
@@ -217,4 +341,6 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     public boolean isCrosshairVisible() {
         return crosshairVisible;
     }
+
+    public boolean isDebugOverlayEnabled(){ return debugOverlay; }
 }

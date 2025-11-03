@@ -5,6 +5,7 @@ public class Camera {
     private Vector3 forward;
     private Vector3 up;
     private double fov;
+    private boolean orthographic = false;
     private double yaw;   // rotation around Y axis
     private double pitch; // rotation around X axis
 
@@ -23,8 +24,14 @@ public class Camera {
     public Vector3 getUp() { return up; }
     public double getFov() { return fov; }
 
+    public boolean isOrthographic() { return orthographic; }
+    public void setOrthographic(boolean o) { this.orthographic = o; }
+
     public Vector3 getRight() {
-        return forward.cross(up).normalize();
+        // Use world-up cross forward to obtain the camera right vector
+        // forward.cross(up) points to the LEFT in our coordinate convention,
+        // so use up.cross(forward) to get a right-handed right vector.
+        return up.cross(forward).normalize();
     }
 
     // Rotate camera by yaw (radians) and pitch (radians). Pitch is clamped to avoid gimbal lock.

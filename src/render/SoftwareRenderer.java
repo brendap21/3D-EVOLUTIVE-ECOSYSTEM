@@ -6,35 +6,48 @@ import math.Vector3;
 import math.Camera;
 
 public class SoftwareRenderer {
-    private BufferedImage buffer;
+    private BufferedImage frontBuffer;
+    private BufferedImage backBuffer;
     private int ancho, alto;
-    private float[] zBuffer;
+    private double[] zBuffer;
 
     public SoftwareRenderer(int ancho, int alto) {
         this.ancho = ancho;
         this.alto = alto;
-        buffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
-        zBuffer = new float[ancho * alto];
+        // Use double buffering: draw to backBuffer, present frontBuffer.
+        frontBuffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
+        backBuffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
+    zBuffer = new double[ancho * alto];
     }
 
-    public BufferedImage getBuffer() {
-        return buffer;
+    // Return the currently displayed (front) buffer. Synchronized to avoid
+    // tearing when swapping from another thread.
+    public synchronized BufferedImage getBuffer() {
+        return frontBuffer;
+    }
+
+    // Swap front/back buffers atomically. Call this after finishing all draw
+    // calls for the frame so the UI can paint the newly rendered image.
+    public synchronized void swapBuffers(){
+        BufferedImage tmp = frontBuffer;
+        frontBuffer = backBuffer;
+        backBuffer = tmp;
     }
 
     public void clear(Color c){
         int rgb = c.getRGB();
         for(int y=0; y<alto; y++){
             for(int x=0; x<ancho; x++){
-                buffer.setRGB(x, y, rgb);
+                backBuffer.setRGB(x, y, rgb);
             }
         }
         // reset z-buffer to far (positive infinity)
-        for(int i=0;i<zBuffer.length;i++) zBuffer[i] = Float.POSITIVE_INFINITY;
+    for(int i=0;i<zBuffer.length;i++) zBuffer[i] = Double.POSITIVE_INFINITY;
     }
 
     // ---------------- Pixel / rect / text helpers (HUD) ----------------
     public void drawPixel(int x, int y, Color color){
-        if(x>=0 && x<ancho && y>=0 && y<alto) buffer.setRGB(x, y, color.getRGB());
+        if(x>=0 && x<ancho && y>=0 && y<alto) backBuffer.setRGB(x, y, color.getRGB());
     }
 
     public void fillRect(int x, int y, int w, int h, Color color){
@@ -45,7 +58,7 @@ public class SoftwareRenderer {
         int y1 = Math.min(alto, y + h);
         for(int yy = y0; yy < y1; yy++){
             for(int xx = x0; xx < x1; xx++){
-                buffer.setRGB(xx, yy, rgb);
+                backBuffer.setRGB(xx, yy, rgb);
             }
         }
     }
@@ -63,7 +76,7 @@ public class SoftwareRenderer {
 
         int x = x1, y = y1;
         while(true){
-            if(x >= 0 && x < ancho && y >= 0 && y < alto) buffer.setRGB(x, y, rgb);
+            if(x >= 0 && x < ancho && y >= 0 && y < alto) backBuffer.setRGB(x, y, rgb);
             if(x == x2 && y == y2) break;
             int e2 = 2*err;
             if(e2 > -dy){ err -= dy; x += sx; }
@@ -73,27 +86,35 @@ public class SoftwareRenderer {
 
     // ---------------- Proyección ----------------
     public double[] project(Vector3 point, Camera cam) {
-        // Translate point to camera-relative coordinates
-        Vector3 p = point.subtract(cam.getPosicion());
+        // Transform point into camera (view) space using camera basis vectors
+        Vector3 camPos = cam.getPosicion();
+        Vector3 rel = new Vector3(point.x - camPos.x, point.y - camPos.y, point.z - camPos.z);
 
-        // Apply inverse camera rotation: rotate world by -yaw (Y axis), then -pitch (X axis)
-        double yaw = cam.getYaw();
-        double pitch = cam.getPitch();
-        math.Matrix4 ry = math.Matrix4.rotationY(-yaw);
-        p = ry.multiply(p);
-        math.Matrix4 rx = math.Matrix4.rotationX(-pitch);
-        p = rx.multiply(p);
-        // near plane: cull points that are too close or behind the camera to avoid
-        // inverted projection and extreme scales which cause flicker.
-        double near = 1.0;
-        if (p.z <= near) {
-            return null;
+    // Build orthonormal camera basis from forward and world-up to avoid skew
+    Vector3 forward = cam.getForward().normalize();
+    Vector3 worldUp = new Vector3(0, 1, 0);
+    Vector3 right = worldUp.cross(forward).normalize();
+    Vector3 up = forward.cross(right).normalize();
+
+    // Camera-space coordinates (dot with orthonormal basis)
+    double cx = rel.x * right.x + rel.y * right.y + rel.z * right.z;
+    double cy = rel.x * up.x    + rel.y * up.y    + rel.z * up.z;
+    double cz = rel.x * forward.x + rel.y * forward.y + rel.z * forward.z;
+
+        double near = 0.1;
+        if (cz <= near) return null;
+
+        if (cam.isOrthographic()){
+            double scale = cam.getFov();
+            double x2d = cx * scale + ancho/2.0;
+            double y2d = alto/2.0 - cy * scale; // invert Y to map world-up to screen-up
+            return new double[]{x2d, y2d, cz};
+        } else {
+            double scale = cam.getFov() / cz;
+            double x2d = cx * scale + ancho/2.0;
+            double y2d = alto/2.0 - cy * scale; // use same scale; cy already multiplied by scale
+            return new double[]{x2d, y2d, cz};
         }
-
-        double scale = cam.getFov() / p.z;
-        double x2d = p.x * scale + ancho/2.0;
-        double y2d = p.y * scale + alto/2.0;
-        return new double[]{x2d, y2d, p.z};
     }
 
     // ---------------- Línea 3D ----------------
@@ -102,7 +123,7 @@ public class SoftwareRenderer {
         double[] proj2 = project(p2, cam);
 
         // If either endpoint is behind the near plane or cannot be projected, skip the line.
-        if (proj1 == null || proj2 == null) return;
+    if (proj1 == null || proj2 == null) return;
 
         int x1 = (int)proj1[0], y1 = (int)proj1[1];
         int x2 = (int)proj2[0], y2 = (int)proj2[1];
@@ -115,8 +136,8 @@ public class SoftwareRenderer {
             if(x1>=0 && x1<ancho && y1>=0 && y1<alto){
                 int idx = y1*ancho + x1;
                 if(z1 < zBuffer[idx]){
-                    zBuffer[idx] = (float)z1;
-                    buffer.setRGB(x1, y1, rgb);
+                    zBuffer[idx] = z1;
+                    backBuffer.setRGB(x1, y1, rgb);
                 }
             }
             return;
@@ -133,8 +154,8 @@ public class SoftwareRenderer {
             if(xi>=0 && xi<ancho && yi>=0 && yi<alto){
                 int idx = yi*ancho + xi;
                 if(fz < zBuffer[idx]){
-                    zBuffer[idx] = (float)fz;
-                    buffer.setRGB(xi, yi, rgb);
+                    zBuffer[idx] = fz;
+                    backBuffer.setRGB(xi, yi, rgb);
                 }
             }
             fx += dx; fy += dy; fz += dz;
@@ -143,13 +164,24 @@ public class SoftwareRenderer {
 
     // ---------------- Cubo ----------------
     public void drawCube(Vector3[] vertices, Camera cam, Color color){
-        int[][] edges = {
-            {0,1},{1,2},{2,3},{3,0},
-            {4,5},{5,6},{6,7},{7,4},
-            {0,4},{1,5},{2,6},{3,7}
+        // Render cube as filled faces (6 faces, 2 triangles each)
+        int[][] faces = {
+            {0,1,2,3}, // back
+            {4,5,6,7}, // front
+            {0,4,5,1}, // bottom
+            {1,5,6,2}, // right
+            {2,6,7,3}, // top
+            {3,7,4,0}  // left
         };
-        for(int[] e : edges){
-            drawLine3D(vertices[e[0]], vertices[e[1]], cam, color);
+
+        for(int[] f : faces){
+            // split quad into two triangles: (a,b,c) and (a,c,d)
+            Vector3 a = vertices[f[0]];
+            Vector3 b = vertices[f[1]];
+            Vector3 c = vertices[f[2]];
+            Vector3 d = vertices[f[3]];
+            drawTriangle(a, b, c, cam, color);
+            drawTriangle(a, c, d, cam, color);
         }
     }
 
@@ -167,6 +199,65 @@ public class SoftwareRenderer {
     // ---------------- Edge Function ----------------
     private float edgeFunction(double[] a, double[] b, double[] c){
         return (float)((c[0]-a[0])*(b[1]-a[1]) - (c[1]-a[1])*(b[0]-a[0]));
+    }
+
+    // ---------------- Rasterizar triángulo (filled) ----------------
+    // Proyecta los tres vértices, realiza backface culling en pantalla,
+    // rasteriza con barycentric/edge functions, interpola profundidad y
+    // escribe en el z-buffer y backBuffer. Aplica sombreado Lambert simple
+    // usando la normal de la cara.
+    public void drawTriangle(Vector3 v0, Vector3 v1, Vector3 v2, Camera cam, Color color){
+        double[] p0 = project(v0, cam);
+        double[] p1 = project(v1, cam);
+        double[] p2 = project(v2, cam);
+
+        if(p0 == null || p1 == null || p2 == null) return;
+
+        // Backface culling in screen space using signed area
+        float area = edgeFunction(p0, p1, p2);
+        if(area <= 0) return; // triangle facing away or degenerate
+
+        // Bounding box in pixel coords
+        int minX = (int)Math.max(0, Math.floor(Math.min(p0[0], Math.min(p1[0], p2[0]))));
+        int maxX = (int)Math.min(ancho-1, Math.ceil(Math.max(p0[0], Math.max(p1[0], p2[0]))));
+        int minY = (int)Math.max(0, Math.floor(Math.min(p0[1], Math.min(p1[1], p2[1]))));
+        int maxY = (int)Math.min(alto-1, Math.ceil(Math.max(p0[1], Math.max(p1[1], p2[1]))));
+
+        // Precompute face normal and lighting
+        Vector3 e1 = v1.subtract(v0);
+        Vector3 e2 = v2.subtract(v0);
+        Vector3 normal = e1.cross(e2).normalize();
+        Vector3 lightDir = new Vector3(0, 0.7, -1).normalize();
+        double intensity = normal.x*lightDir.x + normal.y*lightDir.y + normal.z*lightDir.z;
+        if(intensity < 0) intensity = 0;
+
+        for(int y = minY; y <= maxY; y++){
+            for(int x = minX; x <= maxX; x++){
+                // center of pixel
+                double[] p = {x + 0.5, y + 0.5};
+                float w0 = edgeFunction(p1, p2, p);
+                float w1 = edgeFunction(p2, p0, p);
+                float w2 = edgeFunction(p0, p1, p);
+                if(w0 >= 0 && w1 >= 0 && w2 >= 0){
+                    double alpha = w0 / area;
+                    double beta = w1 / area;
+                    double gamma = w2 / area;
+
+                    double z = alpha * p0[2] + beta * p1[2] + gamma * p2[2];
+                    int idx = y * ancho + x;
+                    if(z < zBuffer[idx]){
+                        zBuffer[idx] = z;
+                        // Simple Lambert shading + ambient
+                        double amb = 0.2;
+                        double lit = amb + (1.0 - amb) * intensity;
+                        int r = (int)Math.min(255, Math.max(0, color.getRed() * lit));
+                        int g = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
+                        int b = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
+                        backBuffer.setRGB(x, y, (new Color(r, g, b)).getRGB());
+                    }
+                }
+            }
+        }
     }
 
     // ---------------- Generar vértices de cubo ----------------
