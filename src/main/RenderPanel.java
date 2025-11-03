@@ -41,12 +41,17 @@ public class RenderPanel extends JPanel {
             int cy = alto / 2;
             int len = 12; // pixel length for each small axis line
 
-            // X axis - horizontal (red)
+            // HUD crosshair: keep X and Y as screen-space lines centered on camera
             renderer.drawLine2D(cx - len, cy, cx + len, cy, Color.RED);
-            // Y axis - vertical (green)
             renderer.drawLine2D(cx, cy - len, cx, cy + len, Color.GREEN);
-            // Z axis - diagonal (blue) - represent forward as small diagonal
-            renderer.drawLine2D(cx, cy, cx + len, cy - len, Color.BLUE);
+            // Blue depth marker: draw a small pixel block exactly at the center
+            int blueSize = 3;
+            int half = blueSize/2;
+            for(int yy = -half; yy <= half; yy++){
+                for(int xx = -half; xx <= half; xx++){
+                    renderer.drawPixel(cx + xx, cy + yy, Color.BLUE);
+                }
+            }
         }
 
         // If paused, draw a pixel-font pause menu overlay (drawn with our own methods).
