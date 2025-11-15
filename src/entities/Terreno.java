@@ -27,20 +27,12 @@ public class Terreno implements Renderable, HeightProvider {
     }
 
     private void generateHeights(long seed){
-        Random r = new Random(seed);
-        double freq1 = 0.08; double amp1 = 18.0;
-        double freq2 = 0.16; double amp2 = 6.0;
-        double ox = r.nextDouble()*1000.0;
-        double oz = r.nextDouble()*1000.0;
+        // For this project requirement the terrain must be completely flat
+        // (no montes ni valles). Set every sample to a constant elevation.
+        double flatHeight = 0.0; // world Y coordinate for the flat plane
         for(int x=0;x<width;x++){
             for(int z=0;z<depth;z++){
-                double wx = (x+ox) * freq1;
-                double wz = (z+oz) * freq1;
-                double h = Math.sin(wx) * Math.cos(wz) * amp1;
-                double wx2 = (x+ox)*freq2; double wz2 = (z+oz)*freq2;
-                h += Math.sin(wx2*1.3 + wz2*0.7) * amp2;
-                h += (r.nextDouble() - 0.5) * 2.0;
-                heights[x][z] = h;
+                heights[x][z] = flatHeight;
             }
         }
     }
@@ -57,8 +49,9 @@ public class Terreno implements Renderable, HeightProvider {
                 Vector3 v01 = new Vector3((x - width/2)*scale, heights[x][z+1], (z+1 - depth/2)*scale);
                 Vector3 v11 = new Vector3((x+1 - width/2)*scale, heights[x+1][z+1], (z+1 - depth/2)*scale);
 
-                double avgH = (heights[x][z] + heights[x+1][z] + heights[x][z+1] + heights[x+1][z+1]) / 4.0;
-                float shade = (float)Math.max(0.0, Math.min(1.0, 0.4 + (avgH/40.0)));
+                // Since the terrain is flat, use a constant shade to keep the
+                // color visually consistent and avoid any apparent undulation.
+                float shade = 1.0f;
                 Color col = new Color(
                     (int)(baseColor.getRed()*shade),
                     (int)(baseColor.getGreen()*shade),
