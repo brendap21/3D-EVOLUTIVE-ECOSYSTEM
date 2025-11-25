@@ -16,6 +16,7 @@ public class Terreno implements Renderable, HeightProvider {
     private double scale;
     private double[][] heights;
     private Color baseColor;
+    private double terrainOffset = -0.01; // shared offset applied to rendered vertices and height queries
 
     public Terreno(int width, int depth, double scale, long seed, Color baseColor){
         this.width = Math.max(2, width);
@@ -42,30 +43,44 @@ public class Terreno implements Renderable, HeightProvider {
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam){
+        // Preproject all grid vertices once so shared edges map to identical screen coords.
+        double[][][] proj = new double[width][depth][]; // proj[x][z] = {x2d,y2d,cz} or null
+        for(int x=0;x<width;x++){
+            for(int z=0; z<depth; z++){
+                Vector3 wv = new Vector3((x - width/2.0)*scale, heights[x][z] + terrainOffset, (z - depth/2.0)*scale);
+                double[] p = renderer.project(wv, cam);
+                if(p != null){
+                    // snap XY to pixel centers for exact shared-edge equality
+                    p[0] = Math.floor(p[0]) + 0.5;
+                    p[1] = Math.floor(p[1]) + 0.5;
+                }
+                proj[x][z] = p;
+            }
+        }
+
+        // Rasterize cells using the preprojected coordinates (skip triangles with missing projection)
+        float shade = 1.0f;
+        Color col = new Color(
+            (int)(baseColor.getRed()*shade),
+            (int)(baseColor.getGreen()*shade),
+            (int)(baseColor.getBlue()*shade)
+        );
         for(int x=0;x<width-1;x++){
-            for(int z=0;z<depth-1;z++){
-                Vector3 v00 = new Vector3((x - width/2)*scale, heights[x][z], (z - depth/2)*scale);
-                Vector3 v10 = new Vector3((x+1 - width/2)*scale, heights[x+1][z], (z - depth/2)*scale);
-                Vector3 v01 = new Vector3((x - width/2)*scale, heights[x][z+1], (z+1 - depth/2)*scale);
-                Vector3 v11 = new Vector3((x+1 - width/2)*scale, heights[x+1][z+1], (z+1 - depth/2)*scale);
-
-                // Since the terrain is flat, use a constant shade to keep the
-                // color visually consistent and avoid any apparent undulation.
-                float shade = 1.0f;
-                Color col = new Color(
-                    (int)(baseColor.getRed()*shade),
-                    (int)(baseColor.getGreen()*shade),
-                    (int)(baseColor.getBlue()*shade)
-                );
-
-                renderer.drawTriangle(v00, v10, v11, cam, col);
-                renderer.drawTriangle(v00, v11, v01, cam, col);
+            for(int z=0; z<depth-1; z++){
+                double[] p00 = proj[x][z];
+                double[] p10 = proj[x+1][z];
+                double[] p01 = proj[x][z+1];
+                double[] p11 = proj[x+1][z+1];
+                // draw two triangles only when projected vertices exist
+                if(p00 != null && p10 != null && p11 != null) renderer.drawTriangleScreen(p00, p10, p11, col);
+                if(p00 != null && p11 != null && p01 != null) renderer.drawTriangleScreen(p00, p11, p01, col);
             }
         }
     }
 
     @Override
     public double getHeightAt(double worldX, double worldZ){
+        // Return height including the terrainOffset so physics/collisions match rendered surface.
         double fx = worldX / scale + width/2.0;
         double fz = worldZ / scale + depth/2.0;
         int x0 = (int)Math.floor(fx);
@@ -80,6 +95,6 @@ public class Terreno implements Renderable, HeightProvider {
         double h11 = heights[x0+1][z0+1];
         double hx0 = h00*(1-sx) + h10*sx;
         double hx1 = h01*(1-sx) + h11*sx;
-        return hx0*(1-sz) + hx1*sz;
+        return hx0*(1-sz) + hx1*sz + terrainOffset;
     }
 }

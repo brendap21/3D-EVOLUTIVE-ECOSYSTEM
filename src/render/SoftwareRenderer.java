@@ -13,7 +13,13 @@ public class SoftwareRenderer {
     private int[] ownerBuffer; // deterministically tracks triangle owner per pixel to break ties
     private int[] writeCountBuffer; // counts writes per pixel for diagnostics
     private boolean diagnosticMode = false;
-    private double depthEps = 1e-3; // global depth epsilon (tunable)
+    private double depthEps = 1e-3; // global depth epsilon (tunable) - compromise to avoid flicker
+
+    // Hole-filling controls to avoid doing expensive post-process every frame.
+    // Disabled by default to preserve maximum fluidity; can be enabled for artifact-free terrain.
+    private boolean holeFillingEnabled = false;
+    private int holeFillInterval = 4; // run fillSmallHoles() once every N frames
+    private int frameCounter = 0;
 
     public SoftwareRenderer(int ancho, int alto) {
         this.ancho = ancho;
@@ -24,7 +30,7 @@ public class SoftwareRenderer {
     zBuffer = new double[ancho * alto];
     ownerBuffer = new int[ancho * alto];
     writeCountBuffer = new int[ancho * alto];
-    diagnosticMode = true; // enable diagnostic overlay by default to help debug z-fighting
+    diagnosticMode = false; // off by default for normal rendering
     }
 
     // Return the currently displayed (front) buffer. Synchronized to avoid
@@ -36,8 +42,14 @@ public class SoftwareRenderer {
     // Swap front/back buffers atomically. Call this after finishing all draw
     // calls for the frame so the UI can paint the newly rendered image.
     public synchronized void swapBuffers(){
+        // Optionally run lightweight hole-filling at a reduced frequency to avoid
+        // impacting frame-rate/fluidez. Disabled by default.
+        if(holeFillingEnabled){
+            if((frameCounter++ % holeFillInterval) == 0) fillSmallHoles();
+        }
+
         // If diagnostic mode is enabled, draw an overlay onto the backBuffer
-        // before presenting so we can see pixels with multiple writes.
+        // so we can see pixels with multiple writes.
         if(diagnosticMode) drawDiagnosticOverlay();
 
         BufferedImage tmp = frontBuffer;
@@ -60,7 +72,13 @@ public class SoftwareRenderer {
 
     // ---------------- Pixel / rect / text helpers (HUD) ----------------
     public void drawPixel(int x, int y, Color color){
-        if(x>=0 && x<ancho && y>=0 && y<alto) backBuffer.setRGB(x, y, color.getRGB());
+        if(x>=0 && x<ancho && y>=0 && y<alto){
+            int idx = y*ancho + x;
+            backBuffer.setRGB(x, y, color.getRGB());
+            // mark as written so hole-filling won't overwrite HUD pixels
+            writeCountBuffer[idx]++;
+            ownerBuffer[idx] = -2; // special owner id for HUD/overlay
+        }
     }
 
     public void fillRect(int x, int y, int w, int h, Color color){
@@ -71,7 +89,10 @@ public class SoftwareRenderer {
         int y1 = Math.min(alto, y + h);
         for(int yy = y0; yy < y1; yy++){
             for(int xx = x0; xx < x1; xx++){
+                int idx = yy * ancho + xx;
                 backBuffer.setRGB(xx, yy, rgb);
+                writeCountBuffer[idx]++;
+                ownerBuffer[idx] = -2;
             }
         }
     }
@@ -89,7 +110,13 @@ public class SoftwareRenderer {
 
         int x = x1, y = y1;
         while(true){
-            if(x >= 0 && x < ancho && y >= 0 && y < alto) backBuffer.setRGB(x, y, rgb);
+            if(x >= 0 && x < ancho && y >= 0 && y < alto){
+                int idx = y*ancho + x;
+                backBuffer.setRGB(x, y, rgb);
+                // mark as HUD drawing so hole-filler won't overwrite the crosshair/menu
+                writeCountBuffer[idx]++;
+                ownerBuffer[idx] = -2;
+            }
             if(x == x2 && y == y2) break;
             int e2 = 2*err;
             if(e2 > -dy){ err -= dy; x += sx; }
@@ -230,6 +257,29 @@ public class SoftwareRenderer {
     // ---------------- Cilindro ----------------
     public void drawCylinder(Vector3[] top, Vector3[] bottom, Camera cam, Color color){
         int n = top.length;
+        if(n == 0) return;
+        // compute center points for top and bottom (average)
+        Vector3 centerTop = new Vector3(0,0,0);
+        Vector3 centerBottom = new Vector3(0,0,0);
+        for(int i=0;i<n;i++){
+            centerTop = centerTop.add(top[i]);
+            centerBottom = centerBottom.add(bottom[i]);
+        }
+        centerTop = centerTop.scale(1.0 / n);
+        centerBottom = centerBottom.scale(1.0 / n);
+
+        // draw filled top cap (triangle fan)
+        for(int i=0;i<n;i++){
+            int next = (i+1)%n;
+            drawTriangle(centerTop, top[i], top[next], cam, color);
+        }
+        // draw filled bottom cap (triangle fan) - winding reversed to keep consistent culling
+        for(int i=0;i<n;i++){
+            int next = (i+1)%n;
+            drawTriangle(centerBottom, bottom[next], bottom[i], cam, color);
+        }
+
+        // draw perimeter lines for visual definition of sides
         for(int i=0; i<n; i++){
             int next = (i+1)%n;
             drawLine3D(top[i], top[next], cam, color);
@@ -295,63 +345,188 @@ public class SoftwareRenderer {
             double[] p2 = project(tri[2], cam);
             if(p0 == null || p1 == null || p2 == null) continue;
 
+            // Pixel-snapping (local): quantize XY to pixel centers so adjacent triangles
+            // that share world vertices map to identical screen coordinates. This
+            // prevents sub-pixel seams for rigid meshes (cubes, cylinders, terrain).
+            p0[0] = Math.floor(p0[0]) + 0.5; p0[1] = Math.floor(p0[1]) + 0.5;
+            p1[0] = Math.floor(p1[0]) + 0.5; p1[1] = Math.floor(p1[1]) + 0.5;
+            p2[0] = Math.floor(p2[0]) + 0.5; p2[1] = Math.floor(p2[1]) + 0.5;
+
             // Backface culling in screen space using signed area (keep previous behavior)
             float area = edgeFunction(p0, p1, p2);
             if(area <= 1e-6f) continue;
-
+            
             // Bounding box in pixel coords
-            int minX = (int)Math.max(0, Math.floor(Math.min(p0[0], Math.min(p1[0], p2[0]))));
-            int maxX = (int)Math.min(ancho-1, Math.ceil(Math.max(p0[0], Math.max(p1[0], p2[0]))));
-            int minY = (int)Math.max(0, Math.floor(Math.min(p0[1], Math.min(p1[1], p2[1]))));
-            int maxY = (int)Math.min(alto-1, Math.ceil(Math.max(p0[1], Math.max(p1[1], p2[1]))));
-
-            for(int y = minY; y <= maxY; y++){
+            // Compute bounding box and expand by 1 pixel to avoid cracks at triangle edges
+            int rawMinX = (int)Math.floor(Math.min(p0[0], Math.min(p1[0], p2[0])));
+            int rawMaxX = (int)Math.ceil (Math.max(p0[0], Math.max(p1[0], p2[0])));
+            int rawMinY = (int)Math.floor(Math.min(p0[1], Math.min(p1[1], p2[1])));
+            int rawMaxY = (int)Math.ceil (Math.max(p0[1], Math.max(p1[1], p2[1])));
+            int minX = Math.max(0, rawMinX - 1);
+            int maxX = Math.min(ancho - 1, rawMaxX + 1);
+            int minY = Math.max(0, rawMinY - 1);
+            int maxY = Math.min(alto - 1, rawMaxY + 1);
+ 
+             for(int y = minY; y <= maxY; y++){
                 for(int x = minX; x <= maxX; x++){
-                    // center of pixel
-                    double[] p = {x + 0.5, y + 0.5};
-                    float w0 = edgeFunction(p1, p2, p);
-                    float w1 = edgeFunction(p2, p0, p);
-                    float w2 = edgeFunction(p0, p1, p);
-                    // Top-left rule: include pixel if edge function is positive,
-                    // or if it's zero and the edge is a top-left edge. Use a
-                    // small EPS to tolerate floating point rounding.
-                    float epsf = 1e-4f;
-                    boolean in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && isTopLeft(p1, p2));
-                    boolean in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && isTopLeft(p2, p0));
-                    boolean in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && isTopLeft(p0, p1));
-                    if(in0 && in1 && in2){
-                        double alpha = w0 / area;
-                        double beta = w1 / area;
-                        double gamma = w2 / area;
+                     // Conservative coverage test:
+                     // include pixel if the pixel center OR any of its 4 corners
+                     // lie inside the triangle (with a tiny tolerance).
+                     float epsf = 1e-6f;
+                     double[] pc = {x + 0.5, y + 0.5};
+                     // Compute center edge functions (these will be used for barycentric)
+                     float w0 = edgeFunction(p1, p2, pc);
+                     float w1 = edgeFunction(p2, p0, pc);
+                     float w2 = edgeFunction(p0, p1, pc);
+                     boolean covered = (w0 >= -epsf && w1 >= -epsf && w2 >= -epsf);
+                     if(!covered){
+                        // test four corners (conservative rasterization) using distinct names
+                        double[][] corners = {
+                            {x + 0.0, y + 0.0},
+                            {x + 1.0, y + 0.0},
+                            {x + 1.0, y + 1.0},
+                            {x + 0.0, y + 1.0}
+                        };
+                        for(int ci=0; ci<4 && !covered; ci++){
+                            double[] cc = corners[ci];
+                            float cc0 = edgeFunction(p1, p2, cc);
+                            float cc1 = edgeFunction(p2, p0, cc);
+                            float cc2 = edgeFunction(p0, p1, cc);
+                            if(cc0 >= -epsf && cc1 >= -epsf && cc2 >= -epsf) covered = true;
+                        }
+                     }
+                     if(covered){
+                         double alpha = w0 / area;
+                         double beta = w1 / area;
+                         double gamma = w2 / area;
+ 
+                         double z = alpha * p0[2] + beta * p1[2] + gamma * p2[2];
+                         int idx = y * ancho + x;
+                         // Small depth epsilon: require z to be sufficiently closer
+                         // than the stored value before overwriting. This prevents
+                         // alternating writes when two triangles are extremely
+                         // close in depth due to numerical noise.
+                         if(z < zBuffer[idx] - depthEps){
+                             zBuffer[idx] = z;
+                             ownerBuffer[idx] = triId;
+                             // Simple Lambert shading + ambient
+                             double lit = amb + (1.0 - amb) * intensity;
+                             int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
+                             int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
+                             int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
+                             backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
+                             writeCountBuffer[idx]++;
+                         } else if(Math.abs(z - zBuffer[idx]) <= depthEps){
+                             int cur = ownerBuffer[idx];
+                             if(cur == -1 || triId < cur){
+                                 ownerBuffer[idx] = triId;
+                                 zBuffer[idx] = z;
+                                 double lit = amb + (1.0 - amb) * intensity;
+                                 int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
+                                 int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
+                                 int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
+                                 backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
+                                 writeCountBuffer[idx]++;
+                             }
+                         }
+                     }
+                 }
+             }
+        }
+    }
 
-                        double z = alpha * p0[2] + beta * p1[2] + gamma * p2[2];
-                        int idx = y * ancho + x;
-                        // Small depth epsilon: require z to be sufficiently closer
-                        // than the stored value before overwriting. This prevents
-                        // alternating writes when two triangles are extremely
-                        // close in depth due to numerical noise.
-                        if(z < zBuffer[idx] - depthEps){
-                            zBuffer[idx] = z;
+    // Rasterize a triangle already given in projected screen-space coordinates.
+    // p arrays are {x_screen, y_screen, cam_z}. This bypasses world->camera projection
+    // and ensures adjacent triangles that share projected vertices produce identical edges.
+    public void drawTriangleScreen(double[] p0, double[] p1, double[] p2, Color color){
+        // Backface culling via signed area
+        float area = edgeFunction(p0, p1, p2);
+        if(area <= 1e-6f) return;
+
+        // deterministic id from projected positions (stable-ish)
+        long ax = Math.round(p0[0]*1000.0), ay = Math.round(p0[1]*1000.0), az = Math.round(p0[2]*1000.0);
+        long bx = Math.round(p1[0]*1000.0), by = Math.round(p1[1]*1000.0), bz = Math.round(p1[2]*1000.0);
+        long cx = Math.round(p2[0]*1000.0), cy = Math.round(p2[1]*1000.0), cz = Math.round(p2[2]*1000.0);
+        long h = ax * 73856093L ^ ay * 19349663L ^ az * 83492791L ^ bx * 2654435761L ^ by * 1361234567L ^ bz * 97531L ^ cx * 7129L ^ cy * 1741L ^ cz * 97L;
+        int triId = (int)(h & 0x7FFFFFFF);
+
+        // Bounding box (expand 1px as before)
+        int rawMinX = (int)Math.floor(Math.min(p0[0], Math.min(p1[0], p2[0])));
+        int rawMaxX = (int)Math.ceil (Math.max(p0[0], Math.max(p1[0], p2[0])));
+        int rawMinY = (int)Math.floor(Math.min(p0[1], Math.min(p1[1], p2[1])));
+        int rawMaxY = (int)Math.ceil (Math.max(p0[1], Math.max(p1[1], p2[1])));
+        int minX = Math.max(0, rawMinX - 1);
+        int maxX = Math.min(ancho - 1, rawMaxX + 1);
+        int minY = Math.max(0, rawMinY - 1);
+        int maxY = Math.min(alto - 1, rawMaxY + 1);
+
+        // Precompute face lighting using geometric normal approximation in camera-space:
+        // approximate normal from projected triangle edges (gives consistent simple shading)
+        double nx = (p1[1]-p0[1])*(p2[2]-p0[2]) - (p1[2]-p0[2])*(p2[1]-p0[1]);
+        double ny = (p1[2]-p0[2])*(p2[0]-p0[0]) - (p1[0]-p0[0])*(p2[2]-p0[2]);
+        double nz = (p1[0]-p0[0])*(p2[1]-p0[1]) - (p1[1]-p0[1])*(p2[0]-p0[0]);
+        double nlen = Math.sqrt(nx*nx + ny*ny + nz*nz);
+        double intensity = 0.5;
+        if(nlen > 1e-6){
+            nx/=nlen; ny/=nlen; nz/=nlen;
+            // lightDir roughly camera-space (-z forward)
+            double lx = 0, ly = 0.7, lz = -1;
+            double llen = Math.sqrt(lx*lx + ly*ly + lz*lz);
+            lx/=llen; ly/=llen; lz/=llen;
+            intensity = nx*lx + ny*ly + nz*lz;
+            if(intensity < 0) intensity = 0;
+        }
+        double amb = 0.2;
+        double lit = amb + (1.0 - amb) * intensity;
+
+        // Raster loop (conservative coverage same as drawTriangle)
+        for(int y = minY; y <= maxY; y++){
+            for(int x = minX; x <= maxX; x++){
+                double[] pc = {x + 0.5, y + 0.5};
+                float w0 = edgeFunction(p1, p2, pc);
+                float w1 = edgeFunction(p2, p0, pc);
+                float w2 = edgeFunction(p0, p1, pc);
+                float epsf = 1e-6f;
+                boolean covered = (w0 >= -epsf && w1 >= -epsf && w2 >= -epsf);
+                if(!covered){
+                    double[][] corners = {
+                        {x + 0.0, y + 0.0},
+                        {x + 1.0, y + 0.0},
+                        {x + 1.0, y + 1.0},
+                        {x + 0.0, y + 1.0}
+                    };
+                    for(int ci=0; ci<4 && !covered; ci++){
+                        double[] cc = corners[ci];
+                        float cc0 = edgeFunction(p1, p2, cc);
+                        float cc1 = edgeFunction(p2, p0, cc);
+                        float cc2 = edgeFunction(p0, p1, cc);
+                        if(cc0 >= -epsf && cc1 >= -epsf && cc2 >= -epsf) covered = true;
+                    }
+                }
+                if(covered){
+                    double alpha = w0 / area;
+                    double beta  = w1 / area;
+                    double gamma = w2 / area;
+                    double z = alpha * p0[2] + beta * p1[2] + gamma * p2[2];
+                    int idx = y * ancho + x;
+                    if(z < zBuffer[idx] - depthEps){
+                        zBuffer[idx] = z;
+                        ownerBuffer[idx] = triId;
+                        int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
+                        int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
+                        int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
+                        backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
+                        writeCountBuffer[idx]++;
+                    } else if(Math.abs(z - zBuffer[idx]) <= depthEps){
+                        int cur = ownerBuffer[idx];
+                        if(cur == -1 || triId < cur){
                             ownerBuffer[idx] = triId;
-                            // Simple Lambert shading + ambient
-                            double lit = amb + (1.0 - amb) * intensity;
+                            zBuffer[idx] = z;
                             int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
                             int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
                             int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
                             backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
                             writeCountBuffer[idx]++;
-                        } else if(Math.abs(z - zBuffer[idx]) <= depthEps){
-                            int cur = ownerBuffer[idx];
-                            if(cur == -1 || triId < cur){
-                                ownerBuffer[idx] = triId;
-                                zBuffer[idx] = z;
-                                double lit = amb + (1.0 - amb) * intensity;
-                                int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
-                                int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
-                                int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
-                                backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
-                                writeCountBuffer[idx]++;
-                            }
                         }
                     }
                 }
@@ -524,5 +699,88 @@ public class SoftwareRenderer {
             bottom[i] = new Vector3(pos.x + xr, pos.y - altura/2.0, pos.z + zr);
         }
         return bottom;
+    }
+
+    // Allow runtime control to enable/disable the hole-filling post-process.
+    public void setHoleFillingEnabled(boolean on){ this.holeFillingEnabled = on; }
+    public boolean isHoleFillingEnabled(){ return this.holeFillingEnabled; }
+    // Adjust how often (in frames) fillSmallHoles runs when enabled. Min 1.
+    public void setHoleFillInterval(int frames){ this.holeFillInterval = Math.max(1, frames); }
+    public int getHoleFillInterval(){ return this.holeFillInterval; }
+
+    // Small conservative hole-filling: optimized candidate-based single-pass fill.
+    private void fillSmallHoles(){
+        int w = ancho, h = alto, N = w*h;
+        // Quick check: if there are very few written pixels, skip (scene empty or cleared)
+        int writtenTotal = 0;
+        for(int i=0;i<N;i++){ if(writeCountBuffer[i] > 0) writtenTotal++; }
+        if(writtenTotal == 0) return;
+
+        // Gather candidate pixels: unwritten pixels that have at least one written neighbor.
+        java.util.ArrayList<Integer> candidates = new java.util.ArrayList<>();
+        for(int y=1; y<h-1; y++){
+            int base = y*w;
+            for(int x=1; x<w-1; x++){
+                int idx = base + x;
+                if(writeCountBuffer[idx] != 0) continue;
+                // 4-neighbor quick test
+                if(writeCountBuffer[idx-1] > 0 || writeCountBuffer[idx+1] > 0 || writeCountBuffer[idx-w] > 0 || writeCountBuffer[idx+w] > 0){
+                    candidates.add(idx);
+                }
+            }
+        }
+        if(candidates.isEmpty()) return;
+
+        // Snapshot arrays we need
+        int[] owner = ownerBuffer; // use live ownerBuffer for checks
+        double[] depth = zBuffer;  // use live zBuffer
+
+        int depthNeighborsRequired = 3; // require majority among neighbors
+        double depthGapThreshold = 0.3; // stricter small threshold
+
+        int[] neighOffsets = { -1, 1, -w, w, -w-1, -w+1, w-1, w+1 };
+        java.util.List<Integer> filled = new java.util.ArrayList<>();
+
+        // Single pass over candidates (lightweight)
+        for(int idx : candidates){
+            // count neighbor owners (exclude HUD owner -2 and unwritten)
+            java.util.HashMap<Integer, java.util.ArrayList<Integer>> ownerMap = new java.util.HashMap<>();
+            for(int off : neighOffsets){
+                int ni = idx + off;
+                if(ni < 0 || ni >= N) continue;
+                int o = owner[ni];
+                if(o >= 0 && writeCountBuffer[ni] > 0){
+                    ownerMap.putIfAbsent(o, new java.util.ArrayList<>());
+                    ownerMap.get(o).add(ni);
+                }
+            }
+            int bestOwner = -1; java.util.List<Integer> bestList = null; int bestCount = 0;
+            for(java.util.Map.Entry<Integer, java.util.ArrayList<Integer>> e : ownerMap.entrySet()){
+                int cnt = e.getValue().size();
+                if(cnt > bestCount){ bestOwner = e.getKey(); bestList = e.getValue(); bestCount = cnt; }
+            }
+            if(bestOwner >= 0 && bestCount >= depthNeighborsRequired && bestList != null){
+                double dmin = Double.POSITIVE_INFINITY, dmax = Double.NEGATIVE_INFINITY, sumD=0; int nd=0;
+                for(int ni : bestList){
+                    double zd = depth[ni];
+                    if(Double.isInfinite(zd)) continue;
+                    dmin = Math.min(dmin, zd); dmax = Math.max(dmax, zd);
+                    sumD += zd; nd++;
+                }
+                if(nd>0 && (dmax - dmin) <= depthGapThreshold){
+                    double avgD = sumD / nd;
+                    // pick color from one neighbor (we can read back once per candidate)
+                    int ny = idx / w; int nx = idx % w;
+                    int rgbSample = backBuffer.getRGB(nx, ny); // representative (neighbor already written)
+                    // commit immediately
+                    zBuffer[idx] = avgD;
+                    ownerBuffer[idx] = bestOwner;
+                    writeCountBuffer[idx] = 1;
+                    backBuffer.setRGB(nx, ny, rgbSample);
+                    filled.add(idx);
+                }
+            }
+        }
+        // done (single fast pass)
     }
 }
