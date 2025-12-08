@@ -14,7 +14,7 @@ public class SoftwareRenderer {
 
     // Small depth epsilon to avoid z-fighting and unstable writes
     // Reduced to avoid suppressing valid near-coplanar triangle pixels during rotation.
-    private double depthEps = 1e-6;
+    private double depthEps = 1e-5; // slightly looser to prevent cracks on coplanar quads (terrain)
 
     // ---------------- Helpers faltantes (proyección/recorte) ----------------
     // Transform a world-space point to camera-space coordinates (cx,cy,cz)
@@ -462,6 +462,12 @@ public class SoftwareRenderer {
             // when winding flips due to clipping/projection.
             float area = edgeFunction(p0, p1, p2);
             if (Math.abs(area) <= 1e-9f) continue;
+            float absArea = area >= 0 ? area : -area;
+            float orient = area >= 0 ? 1f : -1f;
+            // Precompute top-left flags that match the oriented edges
+            boolean tl01 = orient >= 0 ? isTopLeft(p0, p1) : isTopLeft(p1, p0);
+            boolean tl12 = orient >= 0 ? isTopLeft(p1, p2) : isTopLeft(p2, p1);
+            boolean tl20 = orient >= 0 ? isTopLeft(p2, p0) : isTopLeft(p0, p2);
  
             // Bounding box in pixel coords
             // Compute bounding box and expand by 1 pixel to avoid cracks at triangle edges
@@ -481,14 +487,13 @@ public class SoftwareRenderer {
                      // do not both exclude the pixel; this prevents permanent seams on flat faces.
                      float epsf = 1e-6f;
                      double[] pc = {x + 0.5, y + 0.5};
-                     float w0 = edgeFunction(p1, p2, pc);
-                     float w1 = edgeFunction(p2, p0, pc);
-                     float w2 = edgeFunction(p0, p1, pc);
-                     // Determine inclusion per-edge using top-left rule on exact/on-edge cases
-                     boolean in0, in1, in2;
-                     in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && isTopLeft(p1, p2));
-                     in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && isTopLeft(p2, p0));
-                     in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && isTopLeft(p0, p1));
+                     float w0 = edgeFunction(p1, p2, pc) * orient;
+                     float w1 = edgeFunction(p2, p0, pc) * orient;
+                     float w2 = edgeFunction(p0, p1, pc) * orient;
+                     // Determine inclusion per-edge using oriented top-left rule
+                     boolean in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && tl12);
+                     boolean in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && tl20);
+                     boolean in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && tl01);
                      boolean covered = in0 && in1 && in2;
                      // If center test fails, fallback to corner conservative test (keeps prior behavior)
                      if(!covered){
@@ -500,19 +505,19 @@ public class SoftwareRenderer {
                         };
                         for(int ci=0; ci<4 && !covered; ci++){
                             double[] cc = corners[ci];
-                            float cc0 = edgeFunction(p1, p2, cc);
-                            float cc1 = edgeFunction(p2, p0, cc);
-                            float cc2 = edgeFunction(p0, p1, cc);
-                            boolean cin0 = (cc0 > epsf) || (Math.abs(cc0) <= epsf && isTopLeft(p1, p2));
-                            boolean cin1 = (cc1 > epsf) || (Math.abs(cc1) <= epsf && isTopLeft(p2, p0));
-                            boolean cin2 = (cc2 > epsf) || (Math.abs(cc2) <= epsf && isTopLeft(p0, p1));
+                            float cc0 = edgeFunction(p1, p2, cc) * orient;
+                            float cc1 = edgeFunction(p2, p0, cc) * orient;
+                            float cc2 = edgeFunction(p0, p1, cc) * orient;
+                            boolean cin0 = (cc0 > epsf) || (Math.abs(cc0) <= epsf && tl12);
+                            boolean cin1 = (cc1 > epsf) || (Math.abs(cc1) <= epsf && tl20);
+                            boolean cin2 = (cc2 > epsf) || (Math.abs(cc2) <= epsf && tl01);
                             if(cin0 && cin1 && cin2) covered = true;
                         }
                      }
                      if(covered){
-                         double alpha = w0 / area;
-                         double beta = w1 / area;
-                         double gamma = w2 / area;
+                         double alpha = w0 / absArea;
+                         double beta = w1 / absArea;
+                         double gamma = w2 / absArea;
  
                          double z = alpha * p0[2] + beta * p1[2] + gamma * p2[2];
                          int idx = y * ancho + x;
@@ -551,9 +556,19 @@ public class SoftwareRenderer {
     // p arrays are {x_screen, y_screen, cam_z}. This bypasses world->camera projection
     // and ensures adjacent triangles that share projected vertices produce identical edges.
     public void drawTriangleScreen(double[] p0, double[] p1, double[] p2, Color color){
-        // Skip only degenerate triangles (keep both-sided rendering to avoid missing exterior faces)
+        // Pixel-snap at the START of triangle rasterization
+        p0[0] = Math.floor(p0[0]) + 0.5; p0[1] = Math.floor(p0[1]) + 0.5;
+        p1[0] = Math.floor(p1[0]) + 0.5; p1[1] = Math.floor(p1[1]) + 0.5;
+        p2[0] = Math.floor(p2[0]) + 0.5; p2[1] = Math.floor(p2[1]) + 0.5;
+        
         float area = edgeFunction(p0, p1, p2);
         if(Math.abs(area) <= 1e-9f) return;
+        float absArea = area >= 0 ? area : -area;
+        float orient = area >= 0 ? 1f : -1f;
+        // Precompute top-left flags that match the oriented edges
+        boolean tl01 = orient >= 0 ? isTopLeft(p0, p1) : isTopLeft(p1, p0);
+        boolean tl12 = orient >= 0 ? isTopLeft(p1, p2) : isTopLeft(p2, p1);
+        boolean tl20 = orient >= 0 ? isTopLeft(p2, p0) : isTopLeft(p0, p2);
 
         // deterministic id from projected positions (stable-ish)
         long ax = Math.round(p0[0]*1000.0), ay = Math.round(p0[1]*1000.0), az = Math.round(p0[2]*1000.0);
@@ -595,13 +610,13 @@ public class SoftwareRenderer {
         for(int y = minY; y <= maxY; y++){
             for(int x = minX; x <= maxX; x++){
                 double[] pc = {x + 0.5, y + 0.5};
-                float w0 = edgeFunction(p1, p2, pc);
-                float w1 = edgeFunction(p2, p0, pc);
-                float w2 = edgeFunction(p0, p1, pc);
+                float w0 = edgeFunction(p1, p2, pc) * orient;
+                float w1 = edgeFunction(p2, p0, pc) * orient;
+                float w2 = edgeFunction(p0, p1, pc) * orient;
                 float epsf = 1e-6f;
-                boolean in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && isTopLeft(p1, p2));
-                boolean in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && isTopLeft(p2, p0));
-                boolean in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && isTopLeft(p0, p1));
+                boolean in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && tl12);
+                boolean in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && tl20);
+                boolean in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && tl01);
                 boolean covered = in0 && in1 && in2;
                 if(!covered){
                     double[][] corners = {
@@ -612,19 +627,19 @@ public class SoftwareRenderer {
                     };
                     for(int ci=0; ci<4 && !covered; ci++){
                         double[] cc = corners[ci];
-                        float cc0 = edgeFunction(p1, p2, cc);
-                        float cc1 = edgeFunction(p2, p0, cc);
-                        float cc2 = edgeFunction(p0, p1, cc);
-                        boolean cin0 = (cc0 > epsf) || (Math.abs(cc0) <= epsf && isTopLeft(p1, p2));
-                        boolean cin1 = (cc1 > epsf) || (Math.abs(cc1) <= epsf && isTopLeft(p2, p0));
-                        boolean cin2 = (cc2 > epsf) || (Math.abs(cc2) <= epsf && isTopLeft(p0, p1));
+                        float cc0 = edgeFunction(p1, p2, cc) * orient;
+                        float cc1 = edgeFunction(p2, p0, cc) * orient;
+                        float cc2 = edgeFunction(p0, p1, cc) * orient;
+                        boolean cin0 = (cc0 > epsf) || (Math.abs(cc0) <= epsf && tl12);
+                        boolean cin1 = (cc1 > epsf) || (Math.abs(cc1) <= epsf && tl20);
+                        boolean cin2 = (cc2 > epsf) || (Math.abs(cc2) <= epsf && tl01);
                         if(cin0 && cin1 && cin2) covered = true;
                     }
                 }
                 if(covered){
-                    double alpha = w0 / area;
-                    double beta  = w1 / area;
-                    double gamma = w2 / area;
+                    double alpha = w0 / absArea;
+                    double beta  = w1 / absArea;
+                    double gamma = w2 / absArea;
                     double z = alpha * p0[2] + beta * p1[2] + gamma * p2[2];
                     int idx = y * ancho + x;
                     if(z < zBuffer[idx] - depthEps){
@@ -651,107 +666,15 @@ public class SoftwareRenderer {
     }
 
     // Rasterize a convex quad given in projected screen-space coordinates (p = {x_screen, y_screen, cam_z})
-	// Uses robust scanline filling with linear depth interpolation per span.
-	private void drawQuadScreen(double[] p0, double[] p1, double[] p2, double[] p3, Color color){
-		// require all vertices present
-		if(p0 == null || p1 == null || p2 == null || p3 == null) return;
+    // Split into two triangles and render using drawTriangleScreen to ensure consistent edge-testing
+    public void drawQuadScreen(double[] p0, double[] p1, double[] p2, double[] p3, Color color){
+        if(p0 == null || p1 == null || p2 == null || p3 == null) return;
 
-		// Pixel-snap XY to pixel centers to keep shared edges exact
-		p0[0] = Math.floor(p0[0]) + 0.5; p0[1] = Math.floor(p0[1]) + 0.5;
-		p1[0] = Math.floor(p1[0]) + 0.5; p1[1] = Math.floor(p1[1]) + 0.5;
-		p2[0] = Math.floor(p2[0]) + 0.5; p2[1] = Math.floor(p2[1]) + 0.5;
-		p3[0] = Math.floor(p3[0]) + 0.5; p3[1] = Math.floor(p3[1]) + 0.5;
-
-		// Bounding Y
-		double minYd = Math.min(Math.min(p0[1], p1[1]), Math.min(p2[1], p3[1]));
-		double maxYd = Math.max(Math.max(p0[1], p1[1]), Math.max(p2[1], p3[1]));
-		int minY = Math.max(0, (int)Math.floor(minYd) - 1);
-		int maxY = Math.min(alto - 1, (int)Math.ceil(maxYd) + 1);
-
-		// Prebuild edges list
-		double[][] pts = {p0,p1,p2,p3};
-		int[] edgeA = {0,1,2,3}, edgeB = {1,2,3,0};
-
-		// triId from projected positions (stable-ish)
-		long ax = Math.round(p0[0]*1000.0), ay = Math.round(p0[1]*1000.0), az = Math.round(p0[2]*1000.0);
-		long bx = Math.round(p1[0]*1000.0), by = Math.round(p1[1]*1000.0), bz = Math.round(p1[2]*1000.0);
-		long cx = Math.round(p2[0]*1000.0), cy = Math.round(p2[1]*1000.0), cz = Math.round(p2[2]*1000.0);
-		long dx = Math.round(p3[0]*1000.0), dy = Math.round(p3[1]*1000.0), dz = Math.round(p3[2]*1000.0);
-		long h = ax * 73856093L ^ ay * 19349663L ^ az * 83492791L ^ bx * 2654435761L ^ by * 1361234567L ^ bz * 97531L ^ cx * 7129L ^ cy * 1741L ^ cz * 97L ^ dx * 1009L ^ dy * 9176L ^ dz * 101L;
-		int quadId = (int)(h & 0x7FFFFFFF);
-
-		// Simple flat-ish lighting: use ambient + small lambert from a fake light (keeps look)
-		double amb = 0.2;
-		double lit = amb + (1.0 - amb) * 0.8;
-		int baseR = (int)(color.getRed()*lit), baseG = (int)(color.getGreen()*lit), baseB = (int)(color.getBlue()*lit);
-		int packedColor = packRGB(baseR, baseG, baseB);
-
-		for(int y = minY; y <= maxY; y++){
-			double scanY = y + 0.5;
-			// find intersections with edges using half-open rule to avoid double-counting vertices:
-			// include edge if (a.y <= scanY && scanY < b.y) or (b.y <= scanY && scanY < a.y)
-			java.util.ArrayList<double[]> inter = new java.util.ArrayList<>();
-			for(int ei=0; ei<4; ei++){
-				double[] a = pts[edgeA[ei]];
-				double[] b = pts[edgeB[ei]];
-				double ayd = a[1], byd = b[1];
-				double denom = (byd - ayd);
-				// skip degenerate edges
-				if(Math.abs(denom) < 1e-9) continue;
-				double t = (scanY - ayd) / denom;
-				// half-open: accept t in [0,1) so the top endpoint isn't double-counted
-				if(t < 0.0 || t >= 1.0) continue;
-				double ix = a[0] + t*(b[0]-a[0]);
-				double iz = a[2] + t*(b[2]-a[2]);
-				inter.add(new double[]{ix, iz});
-			}
-			if(inter.size() < 2) continue;
-			// sort by x
-			inter.sort((u,v)-> Double.compare(u[0], v[0]));
-			// fill spans pairwise
-			for(int i=0; i+1<inter.size(); i+=2){
-				double[] L = inter.get(i);
-				double[] R = inter.get(i+1);
-				int x0 = (int)Math.ceil(L[0] - 0.5);
-				int x1 = (int)Math.floor(R[0] - 0.5);
-				if(x1 < x0){
-					// single pixel column case
-					int xi = (int)Math.round(L[0]);
-					if(xi < 0 || xi >= ancho) continue;
-					int idx = y * ancho + xi;
-					double z = (L[1] + R[1]) * 0.5;
-					if(z < zBuffer[idx] - depthEps || (Math.abs(z - zBuffer[idx]) <= depthEps && (ownerBuffer[idx] == -1 || quadId < ownerBuffer[idx]))){
-						zBuffer[idx] = z;
-						ownerBuffer[idx] = quadId;
-						backBuffer.setRGB(xi, y, packedColor);
-					}
-					continue;
-				}
-				double xL = L[0], xR = R[0];
-				double zL = L[1], zR = R[1];
-				double span = xR - xL;
-				for(int xx = x0; xx <= x1; xx++){
-					if(xx < 0 || xx >= ancho) continue;
-					double tspan = (span == 0.0) ? 0.0 : ((xx + 0.5) - xL) / span;
-					if(tspan < 0.0) tspan = 0.0; if(tspan > 1.0) tspan = 1.0;
-					double z = zL + tspan*(zR - zL);
-					int idx = y * ancho + xx;
-					if(z < zBuffer[idx] - depthEps){
-					 zBuffer[idx] = z;
-					 ownerBuffer[idx] = quadId;
-					 backBuffer.setRGB(xx, y, packedColor);
-					} else if(Math.abs(z - zBuffer[idx]) <= depthEps){
-					 int cur = ownerBuffer[idx];
-					 if(cur == -1 || quadId < cur){
-						 ownerBuffer[idx] = quadId;
-						 zBuffer[idx] = z;
-						 backBuffer.setRGB(xx, y, packedColor);
-					 }
-					}
-				}
-			}
-		}
-	}
+        // DON'T pixel-snap here - let drawTriangleScreen handle it to ensure
+        // both triangles share the exact same snapped diagonal vertices
+        drawTriangleScreen(p0, p1, p2, color);
+        drawTriangleScreen(p0, p2, p3, color);
+    }
 
     // Deterministic stable id for a triangle given three world-space verts.
     // Rounds coordinates to millimeter-ish precision and mixes them into an int.
@@ -849,4 +772,89 @@ public class SoftwareRenderer {
             }
         }
     }
+
+    /**
+     * Calculate Lambert shading based on surface normal and light direction.
+     * Light is positioned above and behind the camera (top-right-back).
+     * Implementa: ILUMINACIÓN por píxel usando modelo Lambert.
+     */
+    public Color applyLambertShading(Color baseColor, Vector3 normal) {
+        if (normal == null) return baseColor;
+        normal = normal.normalize();
+        
+        // Light direction: fixed position (top-right-back)
+        Vector3 lightDir = new Vector3(0.5, 1, 0.3).normalize();
+        
+        // Calculate dot product (clamped to 0.3-1.0 range for ambient + diffuse)
+        double intensity = Math.max(0.3, Math.min(1.0, 
+            Math.abs(normal.x * lightDir.x + normal.y * lightDir.y + normal.z * lightDir.z)
+        ));
+        
+        // Apply intensity to color
+        int r = (int)(baseColor.getRed() * intensity);
+        int g = (int)(baseColor.getGreen() * intensity);
+        int b = (int)(baseColor.getBlue() * intensity);
+        
+        return new Color(Math.min(255, r), Math.min(255, g), Math.min(255, b));
+    }
+
+    /**
+     * Calculate face normal from three vertices using cross product.
+     * Implementa TRANSFORMACIÓN: cálculo de normal mediante producto cruz.
+     */
+    public Vector3 calculateFaceNormal(Vector3 v0, Vector3 v1, Vector3 v2) {
+        Vector3 edge1 = v1.subtract(v0);
+        Vector3 edge2 = v2.subtract(v0);
+        Vector3 normal = edge1.cross(edge2);
+        double len = Math.sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+        if (len == 0) return new Vector3(0, 0, 1);
+        return new Vector3(normal.x / len, normal.y / len, normal.z / len);
+    }
+
+    /**
+     * Draw a cube with Lambert shading for realistic lighting.
+     */
+    public void drawCubeShaded(Vector3[] vertices, Camera cam, Color color) {
+        // Define faces with vertex indices (cube has 6 faces)
+        int[][] faces = {
+            {0, 1, 2, 3}, // front
+            {4, 5, 6, 7}, // back
+            {0, 4, 5, 1}, // right
+            {1, 5, 6, 2}, // top
+            {2, 6, 7, 3}, // left
+            {3, 7, 4, 0}  // bottom
+        };
+        
+        Vector3[] faceNormals = {
+            calculateFaceNormal(vertices[0], vertices[1], vertices[2]),
+            calculateFaceNormal(vertices[4], vertices[6], vertices[5]),
+            calculateFaceNormal(vertices[0], vertices[5], vertices[4]),
+            calculateFaceNormal(vertices[1], vertices[6], vertices[5]),
+            calculateFaceNormal(vertices[2], vertices[7], vertices[6]),
+            calculateFaceNormal(vertices[3], vertices[4], vertices[7])
+        };
+        
+        for (int f = 0; f < faces.length; f++) {
+            int[] face = faces[f];
+            Vector3 a = vertices[face[0]];
+            Vector3 b = vertices[face[1]];
+            Vector3 c = vertices[face[2]];
+            Vector3 d = vertices[face[3]];
+            
+            Color shadedColor = applyLambertShading(color, faceNormals[f]);
+            
+            double[] pa = project(a, cam);
+            double[] pb = project(b, cam);
+            double[] pc = project(c, cam);
+            double[] pd = project(d, cam);
+            
+            if (pa != null && pb != null && pc != null && pd != null) {
+                drawQuadScreen(pa, pb, pc, pd, shadedColor);
+            } else {
+                drawTriangle(a, b, c, cam, shadedColor);
+                drawTriangle(a, c, d, cam, shadedColor);
+            }
+        }
+    }
 }
+

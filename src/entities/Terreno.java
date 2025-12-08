@@ -43,37 +43,55 @@ public class Terreno implements Renderable, HeightProvider {
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam){
-        // Preproject all grid vertices once so shared edges map to identical screen coords.
-        double[][][] proj = new double[width][depth][]; // proj[x][z] = {x2d,y2d,cz} or null
-        for(int x=0;x<width;x++){
-            for(int z=0; z<depth; z++){
-                Vector3 wv = new Vector3((x - width/2.0)*scale, heights[x][z] + terrainOffset, (z - depth/2.0)*scale);
-                double[] p = renderer.project(wv, cam);
-                if(p != null){
-                    // snap XY to pixel centers for exact shared-edge equality
-                    p[0] = Math.floor(p[0]) + 0.5;
-                    p[1] = Math.floor(p[1]) + 0.5;
+        // Draw a grid-based ground plane using screen-space projection
+        // to ensure perfect pixel alignment with cubes/quads
+        double gridSize = 800;
+        double cellSize = 40;
+        int cells = 20;
+        
+        Color col = new Color(
+            Math.max(0, baseColor.getRed() - 20),
+            Math.max(0, baseColor.getGreen() - 20),
+            Math.max(0, baseColor.getBlue() - 20)
+        );
+        
+        double y = 0.0;
+        
+        // Pre-project all grid vertices to screen space once
+        // This ensures shared vertices project to identical screen coords
+        java.util.HashMap<String, double[]> projCache = new java.util.HashMap<>();
+        
+        for(int ix = 0; ix <= cells; ix++) {
+            for(int iz = 0; iz <= cells; iz++) {
+                double x = -gridSize/2 + ix*cellSize;
+                double z = -gridSize/2 + iz*cellSize;
+                String key = ix + "," + iz;
+                Vector3 v = new Vector3(x, y, z);
+                double[] proj = renderer.project(v, cam);
+                if (proj != null) {
+                    projCache.put(key, proj);
                 }
-                proj[x][z] = p;
             }
         }
-
-        // Rasterize cells using the preprojected coordinates (skip triangles with missing projection)
-        float shade = 1.0f;
-        Color col = new Color(
-            (int)(baseColor.getRed()*shade),
-            (int)(baseColor.getGreen()*shade),
-            (int)(baseColor.getBlue()*shade)
-        );
-        for(int x=0;x<width-1;x++){
-            for(int z=0; z<depth-1; z++){
-                double[] p00 = proj[x][z];
-                double[] p10 = proj[x+1][z];
-                double[] p01 = proj[x][z+1];
-                double[] p11 = proj[x+1][z+1];
-                // draw two triangles only when projected vertices exist
-                if(p00 != null && p10 != null && p11 != null) renderer.drawTriangleScreen(p00, p10, p11, col);
-                if(p00 != null && p11 != null && p01 != null) renderer.drawTriangleScreen(p00, p11, p01, col);
+        
+        // Draw grid cells using projected screen coords
+        for(int ix = 0; ix < cells; ix++) {
+            for(int iz = 0; iz < cells; iz++) {
+                String k00 = ix + "," + iz;
+                String k10 = (ix+1) + "," + iz;
+                String k01 = ix + "," + (iz+1);
+                String k11 = (ix+1) + "," + (iz+1);
+                
+                double[] p00 = projCache.get(k00);
+                double[] p10 = projCache.get(k10);
+                double[] p01 = projCache.get(k01);
+                double[] p11 = projCache.get(k11);
+                
+                if (p00 != null && p10 != null && p01 != null && p11 != null) {
+                    // Use drawQuadScreen (which splits to triangles internally)
+                    // This ensures identical pipeline to cubes
+                    renderer.drawQuadScreen(p00, p10, p11, p01, col);
+                }
             }
         }
     }

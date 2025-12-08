@@ -202,4 +202,6 @@ public class Animal implements Renderable {
             renderer.drawCube(verts, cam, color);
         }
     }
+
+    public Vector3 getPosicion() { return posicion; }
 }

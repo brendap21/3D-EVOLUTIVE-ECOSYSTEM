@@ -12,6 +12,8 @@ import entities.Animal;
 public class Mundo {
     private final List<Renderable> entidades = new ArrayList<>();
     private final List<Animal> animales = new ArrayList<>();
+    private Animal selectedAnimal = null;
+    private boolean waitingForSpawnPosition = false;
 
     public Mundo(){ }
 
@@ -46,4 +48,11 @@ public class Mundo {
         }
         return out;
     }
+
+    // Animal selection
+    public synchronized void setSelectedAnimal(Animal a){ this.selectedAnimal = a; }
+    public synchronized Animal getSelectedAnimal(){ return selectedAnimal; }
+    
+    public synchronized void setWaitingForSpawn(boolean waiting){ this.waitingForSpawnPosition = waiting; }
+    public synchronized boolean isWaitingForSpawn(){ return waitingForSpawnPosition; }
 }

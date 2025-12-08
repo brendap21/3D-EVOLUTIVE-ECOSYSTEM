@@ -343,4 +343,6 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     }
 
     public boolean isDebugOverlayEnabled(){ return debugOverlay; }
+    
+    public Camera getCamera(){ return cam; }
 }
