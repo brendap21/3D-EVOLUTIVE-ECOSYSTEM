@@ -92,7 +92,15 @@ public class PixelFont {
     }
 
     public static int measureTextWidth(String text, int scale){
+        // Support multi-line: return max line width
         int spacing = 1 * scale;
-        return text.length() * ((5*scale) + spacing);
+        String[] lines = text.split("\n", -1);
+        int max = 0;
+        int charStep = (5*scale) + spacing;
+        for(String line : lines){
+            int w = line.length() * charStep;
+            if(w > max) max = w;
+        }
+        return max;
     }
 }

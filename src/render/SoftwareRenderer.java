@@ -11,15 +11,133 @@ public class SoftwareRenderer {
     private int ancho, alto;
     private double[] zBuffer;
     private int[] ownerBuffer; // deterministically tracks triangle owner per pixel to break ties
-    private int[] writeCountBuffer; // counts writes per pixel for diagnostics
-    private boolean diagnosticMode = false;
-    private double depthEps = 1e-3; // global depth epsilon (tunable) - compromise to avoid flicker
 
-    // Hole-filling controls to avoid doing expensive post-process every frame.
-    // Disabled by default to preserve maximum fluidity; can be enabled for artifact-free terrain.
-    private boolean holeFillingEnabled = false;
-    private int holeFillInterval = 4; // run fillSmallHoles() once every N frames
-    private int frameCounter = 0;
+    // Small depth epsilon to avoid z-fighting and unstable writes
+    // Reduced to avoid suppressing valid near-coplanar triangle pixels during rotation.
+    private double depthEps = 1e-6;
+
+    // ---------------- Helpers faltantes (proyección/recorte) ----------------
+    // Transform a world-space point to camera-space coordinates (cx,cy,cz)
+    private double[] worldToCamera(Vector3 point, Camera cam){
+        Vector3 camPos = cam.getPosicion();
+        Vector3 rel = new Vector3(point.x - camPos.x, point.y - camPos.y, point.z - camPos.z);
+        Vector3 forward = cam.getForward().normalize();
+        Vector3 worldUp = new Vector3(0, 1, 0);
+        Vector3 right = worldUp.cross(forward).normalize();
+        Vector3 up = forward.cross(right).normalize();
+        double cx = rel.x * right.x + rel.y * right.y + rel.z * right.z;
+        double cy = rel.x * up.x    + rel.y * up.y    + rel.z * up.z;
+        double cz = rel.x * forward.x + rel.y * forward.y + rel.z * forward.z;
+        return new double[]{cx, cy, cz};
+    }
+
+    private Vector3 lerpVec(Vector3 a, Vector3 b, double t){
+        return new Vector3(a.x*(1-t) + b.x*t, a.y*(1-t) + b.y*t, a.z*(1-t) + b.z*t);
+    }
+
+    private double[] lerpCam(double[] a, double[] b, double t){
+        return new double[]{a[0]*(1-t)+b[0]*t, a[1]*(1-t)+b[1]*t, a[2]*(1-t)+b[2]*t};
+    }
+
+    // Clip a triangle (world-space + camera-space representations) against the near plane cz > near.
+    private java.util.List<Vector3[]> clipTriangleAgainstNear(Vector3 v0w, Vector3 v1w, Vector3 v2w,
+                                                               double[] c0, double[] c1, double[] c2,
+                                                               double near){
+        java.util.List<double[]> cam = new java.util.ArrayList<>();
+        java.util.List<Vector3> world = new java.util.ArrayList<>();
+        cam.add(c0); cam.add(c1); cam.add(c2);
+        world.add(v0w); world.add(v1w); world.add(v2w);
+
+        java.util.List<double[]> outCam = new java.util.ArrayList<>();
+        java.util.List<Vector3> outWorld = new java.util.ArrayList<>();
+
+        for(int i=0;i<3;i++){
+            int j = (i+1)%3;
+            double[] ci = cam.get(i); double[] cj = cam.get(j);
+            Vector3 wi = world.get(i); Vector3 wj = world.get(j);
+            boolean insideI = ci[2] > near;
+            boolean insideJ = cj[2] > near;
+            if(insideI && insideJ){
+                if(outCam.isEmpty() || outCam.get(outCam.size()-1) != cj){
+                    outCam.add(cj); outWorld.add(wj);
+                }
+            } else if(insideI && !insideJ){
+                double t = (near - ci[2]) / (cj[2] - ci[2]);
+                double[] cip = lerpCam(ci, cj, t);
+                Vector3 wip = lerpVec(wi, wj, t);
+                outCam.add(cip); outWorld.add(wip);
+            } else if(!insideI && insideJ){
+                double t = (near - ci[2]) / (cj[2] - ci[2]);
+                double[] cip = lerpCam(ci, cj, t);
+                Vector3 wip = lerpVec(wi, wj, t);
+                outCam.add(cip); outWorld.add(wip);
+                outCam.add(cj); outWorld.add(wj);
+            }
+        }
+
+        java.util.List<Vector3[]> result = new java.util.ArrayList<>();
+        if(outWorld.size() < 3) return result;
+        if(outWorld.size() == 3){
+            result.add(new Vector3[]{outWorld.get(0), outWorld.get(1), outWorld.get(2)});
+            return result;
+        }
+        if(outWorld.size() == 4){
+            result.add(new Vector3[]{outWorld.get(0), outWorld.get(1), outWorld.get(2)});
+            result.add(new Vector3[]{outWorld.get(0), outWorld.get(2), outWorld.get(3)});
+            return result;
+        }
+        for(int i=1;i<outWorld.size()-1;i++) result.add(new Vector3[]{outWorld.get(0), outWorld.get(i), outWorld.get(i+1)});
+        return result;
+    }
+
+    // ---------------- Generadores públicos de mallas (usados por entidades) ----------------
+    // Public helpers so entities can request vertex arrays for cubes/cylinders.
+    public Vector3[] getCubeVertices(Vector3 pos, int tam, double rotY){
+        double half = tam / 2.0;
+        Vector3[] vertices = new Vector3[8];
+        double[][] offsets = {
+            {-half,-half,-half},{half,-half,-half},{half,half,-half},{-half,half,-half},
+            {-half,-half,half},{half,-half,half},{half,half,half},{-half,half,half}
+        };
+        double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        for(int i=0;i<8;i++){
+            double x = offsets[i][0], y = offsets[i][1], z = offsets[i][2];
+            double xr = x * cos - z * sin;
+            double zr = x * sin + z * cos;
+            vertices[i] = new Vector3(pos.x + xr, pos.y + y, pos.z + zr);
+        }
+        return vertices;
+    }
+
+    public Vector3[] getCylinderTopVertices(Vector3 pos, int radio, int altura, double rotY){
+        int sides = 20;
+        Vector3[] top = new Vector3[sides];
+        double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        for(int i=0;i<sides;i++){
+            double angle = 2*Math.PI*i/sides;
+            double x = radio * Math.cos(angle);
+            double z = radio * Math.sin(angle);
+            double xr = x * cos - z * sin;
+            double zr = x * sin + z * cos;
+            top[i] = new Vector3(pos.x + xr, pos.y + altura/2.0, pos.z + zr);
+        }
+        return top;
+    }
+
+    public Vector3[] getCylinderBottomVertices(Vector3 pos, int radio, int altura, double rotY){
+        int sides = 20;
+        Vector3[] bottom = new Vector3[sides];
+        double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        for(int i=0;i<sides;i++){
+            double angle = 2*Math.PI*i/sides;
+            double x = radio * Math.cos(angle);
+            double z = radio * Math.sin(angle);
+            double xr = x * cos - z * sin;
+            double zr = x * sin + z * cos;
+            bottom[i] = new Vector3(pos.x + xr, pos.y - altura/2.0, pos.z + zr);
+        }
+        return bottom;
+    }
 
     public SoftwareRenderer(int ancho, int alto) {
         this.ancho = ancho;
@@ -27,10 +145,8 @@ public class SoftwareRenderer {
         // Use double buffering: draw to backBuffer, present frontBuffer.
         frontBuffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
         backBuffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
-    zBuffer = new double[ancho * alto];
+     zBuffer = new double[ancho * alto];
     ownerBuffer = new int[ancho * alto];
-    writeCountBuffer = new int[ancho * alto];
-    diagnosticMode = false; // off by default for normal rendering
     }
 
     // Return the currently displayed (front) buffer. Synchronized to avoid
@@ -42,15 +158,7 @@ public class SoftwareRenderer {
     // Swap front/back buffers atomically. Call this after finishing all draw
     // calls for the frame so the UI can paint the newly rendered image.
     public synchronized void swapBuffers(){
-        // Optionally run lightweight hole-filling at a reduced frequency to avoid
-        // impacting frame-rate/fluidez. Disabled by default.
-        if(holeFillingEnabled){
-            if((frameCounter++ % holeFillInterval) == 0) fillSmallHoles();
-        }
-
-        // If diagnostic mode is enabled, draw an overlay onto the backBuffer
-        // so we can see pixels with multiple writes.
-        if(diagnosticMode) drawDiagnosticOverlay();
+        // No diagnostic overlay / hole-filling in production renderer to keep pipeline tight.
 
         BufferedImage tmp = frontBuffer;
         frontBuffer = backBuffer;
@@ -67,7 +175,6 @@ public class SoftwareRenderer {
         // reset z-buffer to far (positive infinity)
     for(int i=0;i<zBuffer.length;i++) zBuffer[i] = Double.POSITIVE_INFINITY;
     for(int i=0;i<ownerBuffer.length;i++) ownerBuffer[i] = -1;
-    for(int i=0;i<writeCountBuffer.length;i++) writeCountBuffer[i] = 0;
     }
 
     // ---------------- Pixel / rect / text helpers (HUD) ----------------
@@ -75,9 +182,8 @@ public class SoftwareRenderer {
         if(x>=0 && x<ancho && y>=0 && y<alto){
             int idx = y*ancho + x;
             backBuffer.setRGB(x, y, color.getRGB());
-            // mark as written so hole-filling won't overwrite HUD pixels
-            writeCountBuffer[idx]++;
-            ownerBuffer[idx] = -2; // special owner id for HUD/overlay
+            // HUD pixels: set special owner id so tie-break behavior remains consistent
+            ownerBuffer[idx] = -2;
         }
     }
 
@@ -91,7 +197,6 @@ public class SoftwareRenderer {
             for(int xx = x0; xx < x1; xx++){
                 int idx = yy * ancho + xx;
                 backBuffer.setRGB(xx, yy, rgb);
-                writeCountBuffer[idx]++;
                 ownerBuffer[idx] = -2;
             }
         }
@@ -114,7 +219,6 @@ public class SoftwareRenderer {
                 int idx = y*ancho + x;
                 backBuffer.setRGB(x, y, rgb);
                 // mark as HUD drawing so hole-filler won't overwrite the crosshair/menu
-                writeCountBuffer[idx]++;
                 ownerBuffer[idx] = -2;
             }
             if(x == x2 && y == y2) break;
@@ -194,6 +298,7 @@ public class SoftwareRenderer {
                 int idx = y1*ancho + x1;
                 if(z1 < zBuffer[idx]){
                     zBuffer[idx] = z1;
+                    ownerBuffer[idx] = lineId;
                     backBuffer.setRGB(x1, y1, rgb);
                 }
             }
@@ -216,14 +321,12 @@ public class SoftwareRenderer {
                     zBuffer[idx] = fz;
                     ownerBuffer[idx] = lineId;
                     backBuffer.setRGB(xi, yi, rgb);
-                    writeCountBuffer[idx]++;
                 } else if(Math.abs(fz - zBuffer[idx]) <= depthEps){
                     int cur = ownerBuffer[idx];
                     if(cur == -1 || lineId < cur){
                         ownerBuffer[idx] = lineId;
                         zBuffer[idx] = fz;
                         backBuffer.setRGB(xi, yi, rgb);
-                        writeCountBuffer[idx]++;
                     }
                 }
             }
@@ -233,24 +336,26 @@ public class SoftwareRenderer {
 
     // ---------------- Cubo ----------------
     public void drawCube(Vector3[] vertices, Camera cam, Color color){
-        // Render cube as filled faces (6 faces, 2 triangles each)
         int[][] faces = {
-            {0,1,2,3}, // back
-            {4,5,6,7}, // front
-            {0,4,5,1}, // bottom
-            {1,5,6,2}, // right
-            {2,6,7,3}, // top
-            {3,7,4,0}  // left
+            {0,1,2,3}, {4,5,6,7}, {0,4,5,1},
+            {1,5,6,2}, {2,6,7,3}, {3,7,4,0}
         };
-
         for(int[] f : faces){
-            // split quad into two triangles: (a,b,c) and (a,c,d)
             Vector3 a = vertices[f[0]];
             Vector3 b = vertices[f[1]];
             Vector3 c = vertices[f[2]];
             Vector3 d = vertices[f[3]];
-            drawTriangle(a, b, c, cam, color);
-            drawTriangle(a, c, d, cam, color);
+            double[] pa = project(a, cam);
+            double[] pb = project(b, cam);
+            double[] pc = project(c, cam);
+            double[] pd = project(d, cam);
+            if(pa != null && pb != null && pc != null && pd != null){
+                drawQuadScreen(pa, pb, pc, pd, color);
+            } else {
+                // fallback to world-space triangles if projection not available
+                drawTriangle(a, b, c, cam, color);
+                drawTriangle(a, c, d, cam, color);
+            }
         }
     }
 
@@ -345,17 +450,19 @@ public class SoftwareRenderer {
             double[] p2 = project(tri[2], cam);
             if(p0 == null || p1 == null || p2 == null) continue;
 
-            // Pixel-snapping (local): quantize XY to pixel centers so adjacent triangles
-            // that share world vertices map to identical screen coordinates. This
-            // prevents sub-pixel seams for rigid meshes (cubes, cylinders, terrain).
+            // Pixel-snapping: quantize XY to pixel centers so adjacent triangles
+            // that share world vertices map to identical screen coordinates.
+            // This prevents 1-pixel seams/huecos en caras planas al rotar la cámara.
             p0[0] = Math.floor(p0[0]) + 0.5; p0[1] = Math.floor(p0[1]) + 0.5;
             p1[0] = Math.floor(p1[0]) + 0.5; p1[1] = Math.floor(p1[1]) + 0.5;
             p2[0] = Math.floor(p2[0]) + 0.5; p2[1] = Math.floor(p2[1]) + 0.5;
 
-            // Backface culling in screen space using signed area (keep previous behavior)
+            // Skip only degenerate triangles (very small projected area).
+            // Do NOT cull by sign here — render both sides so external faces don't desaparecer
+            // when winding flips due to clipping/projection.
             float area = edgeFunction(p0, p1, p2);
-            if(area <= 1e-6f) continue;
-            
+            if (Math.abs(area) <= 1e-9f) continue;
+ 
             // Bounding box in pixel coords
             // Compute bounding box and expand by 1 pixel to avoid cracks at triangle edges
             int rawMinX = (int)Math.floor(Math.min(p0[0], Math.min(p1[0], p2[0])));
@@ -369,18 +476,22 @@ public class SoftwareRenderer {
  
              for(int y = minY; y <= maxY; y++){
                 for(int x = minX; x <= maxX; x++){
-                     // Conservative coverage test:
-                     // include pixel if the pixel center OR any of its 4 corners
-                     // lie inside the triangle (with a tiny tolerance).
+                     // Conservative + deterministic edge rule:
+                     // use top-left tie-break when an edge function is (near) zero so adjacent triangles
+                     // do not both exclude the pixel; this prevents permanent seams on flat faces.
                      float epsf = 1e-6f;
                      double[] pc = {x + 0.5, y + 0.5};
-                     // Compute center edge functions (these will be used for barycentric)
                      float w0 = edgeFunction(p1, p2, pc);
                      float w1 = edgeFunction(p2, p0, pc);
                      float w2 = edgeFunction(p0, p1, pc);
-                     boolean covered = (w0 >= -epsf && w1 >= -epsf && w2 >= -epsf);
+                     // Determine inclusion per-edge using top-left rule on exact/on-edge cases
+                     boolean in0, in1, in2;
+                     in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && isTopLeft(p1, p2));
+                     in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && isTopLeft(p2, p0));
+                     in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && isTopLeft(p0, p1));
+                     boolean covered = in0 && in1 && in2;
+                     // If center test fails, fallback to corner conservative test (keeps prior behavior)
                      if(!covered){
-                        // test four corners (conservative rasterization) using distinct names
                         double[][] corners = {
                             {x + 0.0, y + 0.0},
                             {x + 1.0, y + 0.0},
@@ -392,7 +503,10 @@ public class SoftwareRenderer {
                             float cc0 = edgeFunction(p1, p2, cc);
                             float cc1 = edgeFunction(p2, p0, cc);
                             float cc2 = edgeFunction(p0, p1, cc);
-                            if(cc0 >= -epsf && cc1 >= -epsf && cc2 >= -epsf) covered = true;
+                            boolean cin0 = (cc0 > epsf) || (Math.abs(cc0) <= epsf && isTopLeft(p1, p2));
+                            boolean cin1 = (cc1 > epsf) || (Math.abs(cc1) <= epsf && isTopLeft(p2, p0));
+                            boolean cin2 = (cc2 > epsf) || (Math.abs(cc2) <= epsf && isTopLeft(p0, p1));
+                            if(cin0 && cin1 && cin2) covered = true;
                         }
                      }
                      if(covered){
@@ -411,22 +525,20 @@ public class SoftwareRenderer {
                              ownerBuffer[idx] = triId;
                              // Simple Lambert shading + ambient
                              double lit = amb + (1.0 - amb) * intensity;
-                             int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
-                             int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
-                             int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
-                             backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
-                             writeCountBuffer[idx]++;
+                             int rr = (int)(color.getRed() * lit);
+                             int gg = (int)(color.getGreen() * lit);
+                             int bb = (int)(color.getBlue() * lit);
+                             backBuffer.setRGB(x, y, packRGB(rr, gg, bb));
                          } else if(Math.abs(z - zBuffer[idx]) <= depthEps){
                              int cur = ownerBuffer[idx];
                              if(cur == -1 || triId < cur){
                                  ownerBuffer[idx] = triId;
                                  zBuffer[idx] = z;
                                  double lit = amb + (1.0 - amb) * intensity;
-                                 int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
-                                 int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
-                                 int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
-                                 backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
-                                 writeCountBuffer[idx]++;
+                                 int rr = (int)(color.getRed() * lit);
+                                 int gg = (int)(color.getGreen() * lit);
+                                 int bb = (int)(color.getBlue() * lit);
+                                 backBuffer.setRGB(x, y, packRGB(rr, gg, bb));
                              }
                          }
                      }
@@ -439,9 +551,9 @@ public class SoftwareRenderer {
     // p arrays are {x_screen, y_screen, cam_z}. This bypasses world->camera projection
     // and ensures adjacent triangles that share projected vertices produce identical edges.
     public void drawTriangleScreen(double[] p0, double[] p1, double[] p2, Color color){
-        // Backface culling via signed area
+        // Skip only degenerate triangles (keep both-sided rendering to avoid missing exterior faces)
         float area = edgeFunction(p0, p1, p2);
-        if(area <= 1e-6f) return;
+        if(Math.abs(area) <= 1e-9f) return;
 
         // deterministic id from projected positions (stable-ish)
         long ax = Math.round(p0[0]*1000.0), ay = Math.round(p0[1]*1000.0), az = Math.round(p0[2]*1000.0);
@@ -487,7 +599,10 @@ public class SoftwareRenderer {
                 float w1 = edgeFunction(p2, p0, pc);
                 float w2 = edgeFunction(p0, p1, pc);
                 float epsf = 1e-6f;
-                boolean covered = (w0 >= -epsf && w1 >= -epsf && w2 >= -epsf);
+                boolean in0 = (w0 > epsf) || (Math.abs(w0) <= epsf && isTopLeft(p1, p2));
+                boolean in1 = (w1 > epsf) || (Math.abs(w1) <= epsf && isTopLeft(p2, p0));
+                boolean in2 = (w2 > epsf) || (Math.abs(w2) <= epsf && isTopLeft(p0, p1));
+                boolean covered = in0 && in1 && in2;
                 if(!covered){
                     double[][] corners = {
                         {x + 0.0, y + 0.0},
@@ -500,7 +615,10 @@ public class SoftwareRenderer {
                         float cc0 = edgeFunction(p1, p2, cc);
                         float cc1 = edgeFunction(p2, p0, cc);
                         float cc2 = edgeFunction(p0, p1, cc);
-                        if(cc0 >= -epsf && cc1 >= -epsf && cc2 >= -epsf) covered = true;
+                        boolean cin0 = (cc0 > epsf) || (Math.abs(cc0) <= epsf && isTopLeft(p1, p2));
+                        boolean cin1 = (cc1 > epsf) || (Math.abs(cc1) <= epsf && isTopLeft(p2, p0));
+                        boolean cin2 = (cc2 > epsf) || (Math.abs(cc2) <= epsf && isTopLeft(p0, p1));
+                        if(cin0 && cin1 && cin2) covered = true;
                     }
                 }
                 if(covered){
@@ -512,27 +630,128 @@ public class SoftwareRenderer {
                     if(z < zBuffer[idx] - depthEps){
                         zBuffer[idx] = z;
                         ownerBuffer[idx] = triId;
-                        int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
-                        int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
-                        int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
-                        backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
-                        writeCountBuffer[idx]++;
+                        int rr = (int)(color.getRed() * lit);
+                        int gg = (int)(color.getGreen() * lit);
+                        int bb = (int)(color.getBlue() * lit);
+                        backBuffer.setRGB(x, y, packRGB(rr, gg, bb));
                     } else if(Math.abs(z - zBuffer[idx]) <= depthEps){
                         int cur = ownerBuffer[idx];
                         if(cur == -1 || triId < cur){
                             ownerBuffer[idx] = triId;
                             zBuffer[idx] = z;
-                            int rr = (int)Math.min(255, Math.max(0, color.getRed() * lit));
-                            int gg = (int)Math.min(255, Math.max(0, color.getGreen() * lit));
-                            int bb = (int)Math.min(255, Math.max(0, color.getBlue() * lit));
-                            backBuffer.setRGB(x, y, (new Color(rr, gg, bb)).getRGB());
-                            writeCountBuffer[idx]++;
+                            int rr = (int)(color.getRed() * lit);
+                            int gg = (int)(color.getGreen() * lit);
+                            int bb = (int)(color.getBlue() * lit);
+                            backBuffer.setRGB(x, y, packRGB(rr, gg, bb));
                         }
                     }
                 }
             }
         }
     }
+
+    // Rasterize a convex quad given in projected screen-space coordinates (p = {x_screen, y_screen, cam_z})
+	// Uses robust scanline filling with linear depth interpolation per span.
+	private void drawQuadScreen(double[] p0, double[] p1, double[] p2, double[] p3, Color color){
+		// require all vertices present
+		if(p0 == null || p1 == null || p2 == null || p3 == null) return;
+
+		// Pixel-snap XY to pixel centers to keep shared edges exact
+		p0[0] = Math.floor(p0[0]) + 0.5; p0[1] = Math.floor(p0[1]) + 0.5;
+		p1[0] = Math.floor(p1[0]) + 0.5; p1[1] = Math.floor(p1[1]) + 0.5;
+		p2[0] = Math.floor(p2[0]) + 0.5; p2[1] = Math.floor(p2[1]) + 0.5;
+		p3[0] = Math.floor(p3[0]) + 0.5; p3[1] = Math.floor(p3[1]) + 0.5;
+
+		// Bounding Y
+		double minYd = Math.min(Math.min(p0[1], p1[1]), Math.min(p2[1], p3[1]));
+		double maxYd = Math.max(Math.max(p0[1], p1[1]), Math.max(p2[1], p3[1]));
+		int minY = Math.max(0, (int)Math.floor(minYd) - 1);
+		int maxY = Math.min(alto - 1, (int)Math.ceil(maxYd) + 1);
+
+		// Prebuild edges list
+		double[][] pts = {p0,p1,p2,p3};
+		int[] edgeA = {0,1,2,3}, edgeB = {1,2,3,0};
+
+		// triId from projected positions (stable-ish)
+		long ax = Math.round(p0[0]*1000.0), ay = Math.round(p0[1]*1000.0), az = Math.round(p0[2]*1000.0);
+		long bx = Math.round(p1[0]*1000.0), by = Math.round(p1[1]*1000.0), bz = Math.round(p1[2]*1000.0);
+		long cx = Math.round(p2[0]*1000.0), cy = Math.round(p2[1]*1000.0), cz = Math.round(p2[2]*1000.0);
+		long dx = Math.round(p3[0]*1000.0), dy = Math.round(p3[1]*1000.0), dz = Math.round(p3[2]*1000.0);
+		long h = ax * 73856093L ^ ay * 19349663L ^ az * 83492791L ^ bx * 2654435761L ^ by * 1361234567L ^ bz * 97531L ^ cx * 7129L ^ cy * 1741L ^ cz * 97L ^ dx * 1009L ^ dy * 9176L ^ dz * 101L;
+		int quadId = (int)(h & 0x7FFFFFFF);
+
+		// Simple flat-ish lighting: use ambient + small lambert from a fake light (keeps look)
+		double amb = 0.2;
+		double lit = amb + (1.0 - amb) * 0.8;
+		int baseR = (int)(color.getRed()*lit), baseG = (int)(color.getGreen()*lit), baseB = (int)(color.getBlue()*lit);
+		int packedColor = packRGB(baseR, baseG, baseB);
+
+		for(int y = minY; y <= maxY; y++){
+			double scanY = y + 0.5;
+			// find intersections with edges using half-open rule to avoid double-counting vertices:
+			// include edge if (a.y <= scanY && scanY < b.y) or (b.y <= scanY && scanY < a.y)
+			java.util.ArrayList<double[]> inter = new java.util.ArrayList<>();
+			for(int ei=0; ei<4; ei++){
+				double[] a = pts[edgeA[ei]];
+				double[] b = pts[edgeB[ei]];
+				double ayd = a[1], byd = b[1];
+				double denom = (byd - ayd);
+				// skip degenerate edges
+				if(Math.abs(denom) < 1e-9) continue;
+				double t = (scanY - ayd) / denom;
+				// half-open: accept t in [0,1) so the top endpoint isn't double-counted
+				if(t < 0.0 || t >= 1.0) continue;
+				double ix = a[0] + t*(b[0]-a[0]);
+				double iz = a[2] + t*(b[2]-a[2]);
+				inter.add(new double[]{ix, iz});
+			}
+			if(inter.size() < 2) continue;
+			// sort by x
+			inter.sort((u,v)-> Double.compare(u[0], v[0]));
+			// fill spans pairwise
+			for(int i=0; i+1<inter.size(); i+=2){
+				double[] L = inter.get(i);
+				double[] R = inter.get(i+1);
+				int x0 = (int)Math.ceil(L[0] - 0.5);
+				int x1 = (int)Math.floor(R[0] - 0.5);
+				if(x1 < x0){
+					// single pixel column case
+					int xi = (int)Math.round(L[0]);
+					if(xi < 0 || xi >= ancho) continue;
+					int idx = y * ancho + xi;
+					double z = (L[1] + R[1]) * 0.5;
+					if(z < zBuffer[idx] - depthEps || (Math.abs(z - zBuffer[idx]) <= depthEps && (ownerBuffer[idx] == -1 || quadId < ownerBuffer[idx]))){
+						zBuffer[idx] = z;
+						ownerBuffer[idx] = quadId;
+						backBuffer.setRGB(xi, y, packedColor);
+					}
+					continue;
+				}
+				double xL = L[0], xR = R[0];
+				double zL = L[1], zR = R[1];
+				double span = xR - xL;
+				for(int xx = x0; xx <= x1; xx++){
+					if(xx < 0 || xx >= ancho) continue;
+					double tspan = (span == 0.0) ? 0.0 : ((xx + 0.5) - xL) / span;
+					if(tspan < 0.0) tspan = 0.0; if(tspan > 1.0) tspan = 1.0;
+					double z = zL + tspan*(zR - zL);
+					int idx = y * ancho + xx;
+					if(z < zBuffer[idx] - depthEps){
+					 zBuffer[idx] = z;
+					 ownerBuffer[idx] = quadId;
+					 backBuffer.setRGB(xx, y, packedColor);
+					} else if(Math.abs(z - zBuffer[idx]) <= depthEps){
+					 int cur = ownerBuffer[idx];
+					 if(cur == -1 || quadId < cur){
+						 ownerBuffer[idx] = quadId;
+						 zBuffer[idx] = z;
+						 backBuffer.setRGB(xx, y, packedColor);
+					 }
+					}
+				}
+			}
+		}
+	}
 
     // Deterministic stable id for a triangle given three world-space verts.
     // Rounds coordinates to millimeter-ish precision and mixes them into an int.
@@ -550,237 +769,84 @@ public class SoftwareRenderer {
         return (int)(h & 0x7FFFFFFF);
     }
 
-    // Diagnostic overlay: paint pixels that were written multiple times in magenta
-    private void drawDiagnosticOverlay(){
-        int w = ancho, h = alto;
-        for(int y=0;y<h;y++){
-            for(int x=0;x<w;x++){
-                int idx = y*w + x;
-                int wc = writeCountBuffer[idx];
-                if(wc > 1){
-                    // color intensity based on count, clamp
-                    int intensity = Math.min(255, 80 + wc*30);
-                    int rgb = (255<<16) | (0<<8) | (255); // magenta
-                    backBuffer.setRGB(x, y, rgb);
-                }
-            }
-        }
+    // small helper to clamp and pack colors to int RGB to avoid allocating Color objects per pixel
+    private int clampColor(int v){
+        if(v < 0) return 0;
+        if(v > 255) return 255;
+        return v;
     }
 
-    // Enable/disable diagnostics
-    public void setDiagnosticMode(boolean on){ this.diagnosticMode = on; }
-
-    // Transform a world-space point to camera-space coordinates (cx,cy,cz)
-    private double[] worldToCamera(Vector3 point, Camera cam){
-        Vector3 camPos = cam.getPosicion();
-        Vector3 rel = new Vector3(point.x - camPos.x, point.y - camPos.y, point.z - camPos.z);
-        Vector3 forward = cam.getForward().normalize();
-        Vector3 worldUp = new Vector3(0, 1, 0);
-        Vector3 right = worldUp.cross(forward).normalize();
-        Vector3 up = forward.cross(right).normalize();
-        double cx = rel.x * right.x + rel.y * right.y + rel.z * right.z;
-        double cy = rel.x * up.x    + rel.y * up.y    + rel.z * up.z;
-        double cz = rel.x * forward.x + rel.y * forward.y + rel.z * forward.z;
-        return new double[]{cx, cy, cz};
+    private int packRGB(int r, int g, int b){
+        return (clampColor(r) << 16) | (clampColor(g) << 8) | clampColor(b);
     }
 
-    private Vector3 lerpVec(Vector3 a, Vector3 b, double t){
-        return new Vector3(a.x*(1-t) + b.x*t, a.y*(1-t) + b.y*t, a.z*(1-t) + b.z*t);
-    }
-
-    private double[] lerpCam(double[] a, double[] b, double t){
-        return new double[]{a[0]*(1-t)+b[0]*t, a[1]*(1-t)+b[1]*t, a[2]*(1-t)+b[2]*t};
-    }
-
-    // Clip a triangle (world-space + camera-space representations) against
-    // the near plane cz > near. Returns a list of world-space triangles.
-    private java.util.List<Vector3[]> clipTriangleAgainstNear(Vector3 v0w, Vector3 v1w, Vector3 v2w,
-                                                               double[] c0, double[] c1, double[] c2,
-                                                               double near){
-        java.util.List<double[]> cam = new java.util.ArrayList<>();
-        java.util.List<Vector3> world = new java.util.ArrayList<>();
-        cam.add(c0); cam.add(c1); cam.add(c2);
-        world.add(v0w); world.add(v1w); world.add(v2w);
-
-        java.util.List<double[]> outCam = new java.util.ArrayList<>();
-        java.util.List<Vector3> outWorld = new java.util.ArrayList<>();
-
-        for(int i=0;i<3;i++){
-            int j = (i+1)%3;
-            double[] ci = cam.get(i); double[] cj = cam.get(j);
-            Vector3 wi = world.get(i); Vector3 wj = world.get(j);
-            boolean insideI = ci[2] > near;
-            boolean insideJ = cj[2] > near;
-            if(insideI && insideJ){
-                // both inside: keep j
-                if(outCam.isEmpty() || outCam.get(outCam.size()-1) != cj){
-                    outCam.add(cj); outWorld.add(wj);
-                }
-            } else if(insideI && !insideJ){
-                // leaving: add intersection
-                double t = (near - ci[2]) / (cj[2] - ci[2]);
-                double[] cip = lerpCam(ci, cj, t);
-                Vector3 wip = lerpVec(wi, wj, t);
-                outCam.add(cip); outWorld.add(wip);
-            } else if(!insideI && insideJ){
-                // entering: add intersection then j
-                double t = (near - ci[2]) / (cj[2] - ci[2]);
-                double[] cip = lerpCam(ci, cj, t);
-                Vector3 wip = lerpVec(wi, wj, t);
-                outCam.add(cip); outWorld.add(wip);
-                outCam.add(cj); outWorld.add(wj);
-            } else {
-                // both outside: add nothing
-            }
-        }
-
-        java.util.List<Vector3[]> result = new java.util.ArrayList<>();
-        if(outWorld.size() < 3) return result;
-        if(outWorld.size() == 3){
-            result.add(new Vector3[]{outWorld.get(0), outWorld.get(1), outWorld.get(2)});
-            return result;
-        }
-        if(outWorld.size() == 4){
-            // split quad into two triangles (0,1,2) and (0,2,3)
-            result.add(new Vector3[]{outWorld.get(0), outWorld.get(1), outWorld.get(2)});
-            result.add(new Vector3[]{outWorld.get(0), outWorld.get(2), outWorld.get(3)});
-            return result;
-        }
-        // For polygons with more vertices (unlikely for triangle clipping), fan triangulate
-        for(int i=1;i<outWorld.size()-1;i++) result.add(new Vector3[]{outWorld.get(0), outWorld.get(i), outWorld.get(i+1)});
-        return result;
-    }
-
-    // ---------------- Generar vértices de cubo ----------------
-    public Vector3[] getCubeVertices(Vector3 pos, int tam, double rotY){
-        double half = tam / 2.0;
-        Vector3[] vertices = new Vector3[8];
-        double[][] offsets = {
-            {-half,-half,-half},{half,-half,-half},{half,half,-half},{-half,half,-half},
-            {-half,-half,half},{half,-half,half},{half,half,half},{-half,half,half}
-        };
-        double cos = Math.cos(rotY), sin = Math.sin(rotY);
-
-        for(int i=0; i<8; i++){
-            double x = offsets[i][0], y = offsets[i][1], z = offsets[i][2];
-            double xr = x * cos - z * sin;
-            double zr = x * sin + z * cos;
-            vertices[i] = new Vector3(pos.x + xr, pos.y + y, pos.z + zr);
-        }
-        return vertices;
-    }
-
-    // ---------------- Generar vértices de cilindro ----------------
-    public Vector3[] getCylinderTopVertices(Vector3 pos, int radio, int altura, double rotY){
-        int sides = 20;
-        Vector3[] top = new Vector3[sides];
-        double cos = Math.cos(rotY), sin = Math.sin(rotY);
-        for(int i=0; i<sides; i++){
-            double angle = 2*Math.PI*i/sides;
-            double x = radio * Math.cos(angle);
-            double z = radio * Math.sin(angle);
-            double xr = x * cos - z * sin;
-            double zr = x * sin + z * cos;
-            top[i] = new Vector3(pos.x + xr, pos.y + altura/2.0, pos.z + zr);
-        }
-        return top;
-    }
-
-    public Vector3[] getCylinderBottomVertices(Vector3 pos, int radio, int altura, double rotY){
-        int sides = 20;
-        Vector3[] bottom = new Vector3[sides];
-        double cos = Math.cos(rotY), sin = Math.sin(rotY);
-        for(int i=0; i<sides; i++){
-            double angle = 2*Math.PI*i/sides;
-            double x = radio * Math.cos(angle);
-            double z = radio * Math.sin(angle);
-            double xr = x * cos - z * sin;
-            double zr = x * sin + z * cos;
-            bottom[i] = new Vector3(pos.x + xr, pos.y - altura/2.0, pos.z + zr);
-        }
-        return bottom;
-    }
-
-    // Allow runtime control to enable/disable the hole-filling post-process.
-    public void setHoleFillingEnabled(boolean on){ this.holeFillingEnabled = on; }
-    public boolean isHoleFillingEnabled(){ return this.holeFillingEnabled; }
-    // Adjust how often (in frames) fillSmallHoles runs when enabled. Min 1.
-    public void setHoleFillInterval(int frames){ this.holeFillInterval = Math.max(1, frames); }
-    public int getHoleFillInterval(){ return this.holeFillInterval; }
-
-    // Small conservative hole-filling: optimized candidate-based single-pass fill.
-    private void fillSmallHoles(){
-        int w = ancho, h = alto, N = w*h;
-        // Quick check: if there are very few written pixels, skip (scene empty or cleared)
-        int writtenTotal = 0;
-        for(int i=0;i<N;i++){ if(writeCountBuffer[i] > 0) writtenTotal++; }
-        if(writtenTotal == 0) return;
-
-        // Gather candidate pixels: unwritten pixels that have at least one written neighbor.
-        java.util.ArrayList<Integer> candidates = new java.util.ArrayList<>();
-        for(int y=1; y<h-1; y++){
+    public void fillTinyHoles(){
+        int w = this.ancho, h = this.alto;
+        int N = w*h;
+        for(int y=1;y<h-1;y++){
             int base = y*w;
-            for(int x=1; x<w-1; x++){
+            for(int x=1;x<w-1;x++){
                 int idx = base + x;
-                if(writeCountBuffer[idx] != 0) continue;
-                // 4-neighbor quick test
-                if(writeCountBuffer[idx-1] > 0 || writeCountBuffer[idx+1] > 0 || writeCountBuffer[idx-w] > 0 || writeCountBuffer[idx+w] > 0){
-                    candidates.add(idx);
+                if(!Double.isInfinite(zBuffer[idx])) continue; // only consider unwritten pixels
+                // Collect neighbor colors & depths (4-neighborhood)
+                int[] neighIdx = { idx-1, idx+1, idx-w, idx+w };
+                java.util.HashMap<Integer,Integer> freq = new java.util.HashMap<>();
+                java.util.HashMap<Integer,Double> depthSum = new java.util.HashMap<>();
+                java.util.HashMap<Integer,Integer> ownerExample = new java.util.HashMap<>();
+                int validNeighbors = 0;
+                for(int ni : neighIdx){
+                    if(ni < 0 || ni >= N) continue;
+                    if(Double.isInfinite(zBuffer[ni])) continue;
+                    validNeighbors++;
+                    int rgb = backBuffer.getRGB(ni % w, ni / w);
+                    freq.put(rgb, freq.getOrDefault(rgb, 0) + 1);
+                    depthSum.put(rgb, depthSum.getOrDefault(rgb, 0.0) + zBuffer[ni]);
+                    ownerExample.putIfAbsent(rgb, ownerBuffer[ni]);
+                }
+                if(validNeighbors < 2) continue; // need at least two neighbors to make a decision
+                // find majority color
+                int bestColor = 0; int bestCount = 0;
+                for(java.util.Map.Entry<Integer,Integer> e : freq.entrySet()){
+                    if(e.getValue() > bestCount){ bestCount = e.getValue(); bestColor = e.getKey(); }
+                }
+                if(bestCount >= 2){
+                    // commit fill: set color, approximate depth and owner
+                    int nx = x, ny = y;
+                    backBuffer.setRGB(nx, ny, bestColor);
+                    double avgDepth = depthSum.get(bestColor) / freq.get(bestColor);
+                    zBuffer[idx] = avgDepth;
+                    ownerBuffer[idx] = ownerExample.getOrDefault(bestColor, -1);
                 }
             }
         }
-        if(candidates.isEmpty()) return;
+    }
 
-        // Snapshot arrays we need
-        int[] owner = ownerBuffer; // use live ownerBuffer for checks
-        double[] depth = zBuffer;  // use live zBuffer
-
-        int depthNeighborsRequired = 3; // require majority among neighbors
-        double depthGapThreshold = 0.3; // stricter small threshold
-
-        int[] neighOffsets = { -1, 1, -w, w, -w-1, -w+1, w-1, w+1 };
-        java.util.List<Integer> filled = new java.util.ArrayList<>();
-
-        // Single pass over candidates (lightweight)
-        for(int idx : candidates){
-            // count neighbor owners (exclude HUD owner -2 and unwritten)
-            java.util.HashMap<Integer, java.util.ArrayList<Integer>> ownerMap = new java.util.HashMap<>();
-            for(int off : neighOffsets){
-                int ni = idx + off;
-                if(ni < 0 || ni >= N) continue;
-                int o = owner[ni];
-                if(o >= 0 && writeCountBuffer[ni] > 0){
-                    ownerMap.putIfAbsent(o, new java.util.ArrayList<>());
-                    ownerMap.get(o).add(ni);
-                }
-            }
-            int bestOwner = -1; java.util.List<Integer> bestList = null; int bestCount = 0;
-            for(java.util.Map.Entry<Integer, java.util.ArrayList<Integer>> e : ownerMap.entrySet()){
-                int cnt = e.getValue().size();
-                if(cnt > bestCount){ bestOwner = e.getKey(); bestList = e.getValue(); bestCount = cnt; }
-            }
-            if(bestOwner >= 0 && bestCount >= depthNeighborsRequired && bestList != null){
-                double dmin = Double.POSITIVE_INFINITY, dmax = Double.NEGATIVE_INFINITY, sumD=0; int nd=0;
-                for(int ni : bestList){
-                    double zd = depth[ni];
-                    if(Double.isInfinite(zd)) continue;
-                    dmin = Math.min(dmin, zd); dmax = Math.max(dmax, zd);
-                    sumD += zd; nd++;
-                }
-                if(nd>0 && (dmax - dmin) <= depthGapThreshold){
-                    double avgD = sumD / nd;
-                    // pick color from one neighbor (we can read back once per candidate)
-                    int ny = idx / w; int nx = idx % w;
-                    int rgbSample = backBuffer.getRGB(nx, ny); // representative (neighbor already written)
-                    // commit immediately
-                    zBuffer[idx] = avgD;
-                    ownerBuffer[idx] = bestOwner;
-                    writeCountBuffer[idx] = 1;
-                    backBuffer.setRGB(nx, ny, rgbSample);
-                    filled.add(idx);
-                }
+    public void fillHorizontalSeams(){
+        int w = this.ancho, h = this.alto;
+        int N = w * h;
+        // conservative tolerance for depth similarity (tune if necessary)
+        double depthTol = 1e-2;
+        for(int y = 0; y < h; y++){
+            int base = y * w;
+            for(int x = 1; x < w - 1; x++){
+                int idx = base + x;
+                // only consider unwritten pixels (holes)
+                if(!Double.isInfinite(zBuffer[idx])) continue;
+                int l = idx - 1, r = idx + 1;
+                if(l < 0 || r >= N) continue;
+                if(Double.isInfinite(zBuffer[l]) || Double.isInfinite(zBuffer[r])) continue;
+                int clrL = backBuffer.getRGB(x-1, y);
+                int clrR = backBuffer.getRGB(x+1, y);
+                if(clrL != clrR) continue;
+                double zl = zBuffer[l], zr = zBuffer[r];
+                if(Double.isInfinite(zl) || Double.isInfinite(zr)) continue;
+                if(Math.abs(zl - zr) > depthTol) continue; // require similar depth
+                // commit fill using neighbor color and averaged depth
+                double zavg = (zl + zr) * 0.5;
+                zBuffer[idx] = zavg;
+                ownerBuffer[idx] = ownerBuffer[l] != -1 ? ownerBuffer[l] : ownerBuffer[r];
+                backBuffer.setRGB(x, y, clrL);
             }
         }
-        // done (single fast pass)
     }
 }

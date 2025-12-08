@@ -41,6 +41,13 @@ public class RenderPanel extends JPanel {
             e.render(renderer, cam);
         }
 
+        // Fix small 1-pixel holes left by rasterization due to edge tie-breaks/rounding.
+        // This is a fast single-pass conservative fill that fixes persistent seams.
+        renderer.fillTinyHoles();
+        // Additionally fill one-pixel horizontal seams that can appear as thin lines
+        // (conservative: only when left/right neighbors agree in color and depth).
+        renderer.fillHorizontalSeams();
+
         // Draw crosshair axis lines if requested (always centered on screen)
         if(controles != null && controles.isCrosshairVisible()){
             int cx = ancho / 2;
@@ -121,64 +128,14 @@ public class RenderPanel extends JPanel {
             int btnX = cx - btnW/2;
             int btnY = titleY + 80;
 
-            // Continue button
-            renderer.fillRect(btnX, btnY, btnW, btnH, new Color(50,50,80));
-            // border
-            renderer.drawLine2D(btnX, btnY, btnX+btnW-1, btnY, Color.WHITE);
-            renderer.drawLine2D(btnX, btnY+btnH-1, btnX+btnW-1, btnY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX, btnY, btnX, btnY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX+btnW-1, btnY, btnX+btnW-1, btnY+btnH-1, Color.WHITE);
-            // center text
-            int contScale = 2;
-            int contCharW = 5*contScale + 1*contScale;
-            int contW = contTxt.length()*contCharW;
-            int contTextX = cx - contW/2;
-            int contTextY = btnY + (btnH - 7*contScale)/2;
-            PixelFont.drawText(renderer, contTextX, contTextY, contTxt, contScale, Color.WHITE);
-
-            // Save button below Continue
+            // draw buttons via helper to reduce repetition
+            drawButton(renderer, btnX, btnY, btnW, btnH, new Color(50,50,80), contTxt, 2);
             int saveY = btnY + btnH + 12;
-            renderer.fillRect(btnX, saveY, btnW, btnH, new Color(40,80,40));
-            renderer.drawLine2D(btnX, saveY, btnX+btnW-1, saveY, Color.WHITE);
-            renderer.drawLine2D(btnX, saveY+btnH-1, btnX+btnW-1, saveY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX, saveY, btnX, saveY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX+btnW-1, saveY, btnX+btnW-1, saveY+btnH-1, Color.WHITE);
-            String saveTxt = "GUARDAR";
-            int saveScale = 2;
-            int saveCharW = 5*saveScale + 1*saveScale;
-            int saveW = saveTxt.length()*saveCharW;
-            int saveTextX = cx - saveW/2;
-            int saveTextY = saveY + (btnH - 7*saveScale)/2;
-            PixelFont.drawText(renderer, saveTextX, saveTextY, saveTxt, saveScale, Color.WHITE);
-
-            // Load button below Save
+            drawButton(renderer, btnX, saveY, btnW, btnH, new Color(40,80,40), "GUARDAR", 2);
             int loadY = saveY + btnH + 12;
-            renderer.fillRect(btnX, loadY, btnW, btnH, new Color(40,40,80));
-            renderer.drawLine2D(btnX, loadY, btnX+btnW-1, loadY, Color.WHITE);
-            renderer.drawLine2D(btnX, loadY+btnH-1, btnX+btnW-1, loadY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX, loadY, btnX, loadY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX+btnW-1, loadY, btnX+btnW-1, loadY+btnH-1, Color.WHITE);
-            String loadTxt = "CARGAR";
-            int loadScale = 2;
-            int loadCharW = 5*loadScale + 1*loadScale;
-            int loadW = loadTxt.length()*loadCharW;
-            int loadTextX = cx - loadW/2;
-            int loadTextY = loadY + (btnH - 7*loadScale)/2;
-            PixelFont.drawText(renderer, loadTextX, loadTextY, loadTxt, loadScale, Color.WHITE);
-
-            // Exit button below
+            drawButton(renderer, btnX, loadY, btnW, btnH, new Color(40,40,80), "CARGAR", 2);
             int exitY = loadY + btnH + 12;
-            renderer.fillRect(btnX, exitY, btnW, btnH, new Color(80,40,40));
-            renderer.drawLine2D(btnX, exitY, btnX+btnW-1, exitY, Color.WHITE);
-            renderer.drawLine2D(btnX, exitY+btnH-1, btnX+btnW-1, exitY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX, exitY, btnX, exitY+btnH-1, Color.WHITE);
-            renderer.drawLine2D(btnX+btnW-1, exitY, btnX+btnW-1, exitY+btnH-1, Color.WHITE);
-            int exitScale = 2;
-            int exitCharW = 5*exitScale + 1*exitScale;
-            int exitW = exitTxt.length()*exitCharW;
-            int exitTextX = cx - exitW/2;
-            int exitTextY = exitY + (btnH - 7*exitScale)/2;
-            PixelFont.drawText(renderer, exitTextX, exitTextY, exitTxt, exitScale, Color.WHITE);
+            drawButton(renderer, btnX, exitY, btnW, btnH, new Color(80,40,40), exitTxt, 2);
 
             // store last button rects for hit-testing
             this.lastContX = btnX; this.lastContY = btnY; this.lastContW = btnW; this.lastContH = btnH;
@@ -237,5 +194,19 @@ public class RenderPanel extends JPanel {
         }
         // Not paused: clicking the panel should lock the mouse and enter mouse-look
         if (controles != null) controles.lockMouse(true);
+    }
+
+    // Helper: draw a rectangular pixel-button with centered pixel-font text.
+    private void drawButton(render.SoftwareRenderer renderer, int x, int y, int w, int h, java.awt.Color bg, String text, int textScale){
+        renderer.fillRect(x, y, w, h, bg);
+        renderer.drawLine2D(x, y, x + w - 1, y, java.awt.Color.WHITE);
+        renderer.drawLine2D(x, y + h - 1, x + w - 1, y + h - 1, java.awt.Color.WHITE);
+        renderer.drawLine2D(x, y, x, y + h - 1, java.awt.Color.WHITE);
+        renderer.drawLine2D(x + w - 1, y, x + w - 1, y + h - 1, java.awt.Color.WHITE);
+        int charW = 5*textScale + 1*textScale;
+        int tw = text.length() * charW;
+        int tx = x + (w - tw)/2;
+        int ty = y + (h - 7*textScale)/2;
+        render.PixelFont.drawText(renderer, tx, ty, text, textScale, java.awt.Color.WHITE);
     }
 }

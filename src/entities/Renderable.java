@@ -1,9 +1,5 @@
-package main;
+package entities;
 
-import render.SoftwareRenderer;
-import math.Camera;
-
-public interface Renderable {
-    void render(SoftwareRenderer renderer, Camera cam);
-    void update();
-}
+// Reexport the main.Renderable interface to avoid duplicate definitions.
+// Any code importing entities.Renderable will now refer to the single canonical interface.
+public interface Renderable extends main.Renderable {}

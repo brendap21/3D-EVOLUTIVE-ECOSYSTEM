@@ -36,8 +36,7 @@ public class Simulador extends Thread {
             long newSeed = seed + tick * 7919 + idx * 131;
             a.mutate(newSeed);
             tick++;
-            // stop after 3 minutes (180 ticks)
-            if(tick >= 180) running = false;
+            // simulation runs until shutdown() is called
         }
     }
 }
