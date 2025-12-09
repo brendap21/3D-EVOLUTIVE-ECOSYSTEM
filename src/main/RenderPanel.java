@@ -295,10 +295,15 @@ public class RenderPanel extends JPanel {
             double spawnX = screenToWorld[0];
             double spawnZ = screenToWorld[1];
             
+            // Get terrain height at spawn position
+            double terrainHeight = mundo.getHeightAt(spawnX, spawnZ);
+            if (terrainHeight == Double.NEGATIVE_INFINITY) terrainHeight = 0.0;
+            double spawnY = terrainHeight + 1.0; // 1 unit above terrain
+            
             // Spawn a new animal at this position
             long seed = System.currentTimeMillis();
             int type = new java.util.Random().nextInt(10);
-            main.Renderable animal = main.EcosistemaApp.createAnimalOfType(type, new Vector3(spawnX, 10, spawnZ), seed);
+            main.Renderable animal = main.EcosistemaApp.createAnimalOfType(type, new Vector3(spawnX, spawnY, spawnZ), seed);
             if (animal instanceof entities.Animal) {
                 mundo.addAnimal((entities.Animal) animal);
             }

@@ -88,7 +88,12 @@ public class EcosistemaApp {
             // Spawn in visible area in front of camera (camera is at 0,50,-200)
             double x = -150 + r.nextDouble() * 300; // -150 to 150
             double z = -100 + r.nextDouble() * 200; // -100 to 100 (in front of camera)
-            double y = 15; // Fixed height above ground
+            
+            // Get terrain height at this position and place animal on ground
+            double terrainHeight = mundo.getHeightAt(x, z);
+            if (terrainHeight == Double.NEGATIVE_INFINITY) terrainHeight = 0.0;
+            double y = terrainHeight + 1.0; // 1 unit above terrain to avoid clipping
+            
             Vector3 pos = new Vector3(x, y, z);
 
             // Check minimum distance from other animals
