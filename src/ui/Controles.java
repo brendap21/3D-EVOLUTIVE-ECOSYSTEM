@@ -45,6 +45,9 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     
     // Animal spawner menu
     private AnimalSpawnerMenu spawnerMenu;
+    
+    // Animal panel state
+    private boolean animalPanelOpen = false;
 
     public Controles(Camera cam, Component comp) {
         this.cam = cam;
@@ -123,6 +126,14 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         if (e.getKeyCode() < 256)
             teclas[e.getKeyCode()] = true;
         
+        // If the animal info panel is open, ESC should only close that flow and do nothing else.
+        if (animalPanelOpen) {
+            if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                setAnimalPanelOpen(false);
+            }
+            return; // Block pause toggle or other actions while panel is active
+        }
+
         // If spawner menu is open, handle menu-specific keys
         if (spawnerMenu.isOpen()) {
             handleSpawnerMenuKeys(e);
@@ -407,4 +418,20 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     public Camera getCamera(){ return cam; }
     
     public AnimalSpawnerMenu getSpawnerMenu() { return spawnerMenu; }
+    
+    public void setAnimalPanelOpen(boolean open) {
+        animalPanelOpen = open;
+        if (animalPanelOpen) {
+            // Unlock mouse to click the panel
+            lockMouse(false);
+        } else {
+            // Lock mouse again
+            lockMouse(true);
+        }
+    }
+    
+    public boolean isAnimalPanelOpen() {
+        return animalPanelOpen;
+    }
 }
+

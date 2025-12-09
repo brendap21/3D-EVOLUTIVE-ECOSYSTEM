@@ -3,6 +3,7 @@ package main;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -92,6 +93,13 @@ public class RenderPanel extends JPanel {
     }
 
     private List<ButtonBounds> pauseMenuButtons = Collections.emptyList();
+    
+    // Animal selection
+    private entities.BaseAnimal hoveredAnimal = null;
+    private entities.BaseAnimal selectedAnimal = null;
+    private double animalPanelSlideProgress = 0.0;
+    private ButtonBounds deleteAnimalButton = null;
+    private boolean animalPanelActive = false; // Si el panel está activo
 
     public RenderPanel(int ancho, int alto) {
         this.ancho = ancho;
@@ -107,6 +115,17 @@ public class RenderPanel extends JPanel {
 
     public void render(List<Renderable> entidades, Camera cam, Controles controles) {
         renderer.clear(SKY_COLOR);
+        
+        // Detect hovered animal under cursor
+        updateHoveredAnimal(entidades, cam, controles);
+        
+        // Update animal panel slide animation
+        double targetSlide = selectedAnimal != null ? 1.0 : 0.0;
+        if (animalPanelSlideProgress < targetSlide) {
+            animalPanelSlideProgress = Math.min(1.0, animalPanelSlideProgress + 0.08);
+        } else if (animalPanelSlideProgress > targetSlide) {
+            animalPanelSlideProgress = Math.max(0.0, animalPanelSlideProgress - 0.08);
+        }
 
         if (entidades != null) {
             for (Renderable r : entidades) {
@@ -137,6 +156,11 @@ public class RenderPanel extends JPanel {
         // Draw pause menu if paused
         if (controles != null && controles.isPaused()) {
             drawPauseMenu();
+        }
+        
+        // Draw animal info panel
+        if (animalPanelSlideProgress > 0.01) {
+            drawAnimalInfoPanel();
         }
 
         drawHUD(controles, menu, cam);
@@ -459,14 +483,46 @@ public class RenderPanel extends JPanel {
         return result;
     }
 
+    public void handleKeyPressed(KeyEvent e, Controles controles) {
+        if (controles == null) return;
+        
+        // If animal panel is open and ESC is pressed, close it
+        if (animalPanelActive && e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+            if (selectedAnimal != null) {
+                selectedAnimal.setSelected(false);
+            }
+            selectedAnimal = null;
+            animalPanelActive = false;
+            controles.setAnimalPanelOpen(false);
+            e.consume();
+        }
+    }
+
     public void handleMousePressed(MouseEvent e, Controles controles) {
         if (controles == null) return;
         
-        // Handle pause menu clicks first
+        int mx = e.getX();
+        int my = e.getY();
+        
+        // Handle animal info panel clicks first
+        if (selectedAnimal != null && deleteAnimalButton != null) {
+            if (SwingUtilities.isLeftMouseButton(e) && deleteAnimalButton.contains(mx, my)) {
+                // Delete animal
+                if (mundo != null) {
+                    mundo.removeEntity(selectedAnimal);
+                }
+                selectedAnimal.setSelected(false);
+                selectedAnimal = null;
+                animalPanelActive = false;
+                controles.setAnimalPanelOpen(false);
+                setTransientMessage("Animal eliminado", new Color(255, 150, 50), 2000);
+                return;
+            }
+        }
+        
+        // Handle pause menu clicks
         if (controles.isPaused()) {
             if (SwingUtilities.isLeftMouseButton(e)) {
-                int mx = e.getX();
-                int my = e.getY();
                 for (ButtonBounds btn : pauseMenuButtons) {
                     if (btn.contains(mx, my)) {
                         handlePauseMenuAction(btn.action, controles);
@@ -482,8 +538,6 @@ public class RenderPanel extends JPanel {
 
         if (menu.isOpen()) {
             if (SwingUtilities.isLeftMouseButton(e)) {
-                int mx = e.getX();
-                int my = e.getY();
                 for (MenuItemBounds b : lastMenuBounds) {
                     if (b.contains(mx, my)) {
                         int current = menu.getSelectedIndex();
@@ -508,7 +562,43 @@ public class RenderPanel extends JPanel {
             }
             return;
         }
-
+        
+        // Handle animal selection with right click
+        if (SwingUtilities.isRightMouseButton(e)) {
+            if (animalPanelActive) {
+                // If panel is active, this closes it
+                if (selectedAnimal != null) {
+                    selectedAnimal.setSelected(false);
+                }
+                selectedAnimal = null;
+                animalPanelActive = false;
+                controles.setAnimalPanelOpen(false);
+                return;
+            }
+            
+            if (hoveredAnimal != null) {
+                // Deselect previous
+                if (selectedAnimal != null) {
+                    selectedAnimal.setSelected(false);
+                }
+                // Select new
+                selectedAnimal = hoveredAnimal;
+                selectedAnimal.setSelected(true);
+                animalPanelActive = true;
+                controles.setAnimalPanelOpen(true);
+                setTransientMessage("Animal #" + selectedAnimal.getAnimalId() + " seleccionado", new Color(100, 200, 255), 2000);
+                return;
+            } else {
+                // Clicked empty space - deselect
+                if (selectedAnimal != null) {
+                    selectedAnimal.setSelected(false);
+                    selectedAnimal = null;
+                    animalPanelActive = false;
+                    controles.setAnimalPanelOpen(false);
+                }
+            }
+        }
+        
         controles.lockMouse(true);
     }
 
@@ -542,6 +632,9 @@ public class RenderPanel extends JPanel {
         if (mundo == null) return;
         if (controles == null) return;
         AnimalSpawnerMenu menu = controles.getSpawnerMenu();
+        
+        // Prevenir spawns duplicados
+        if (!mundo.isWaitingForSpawn()) return;
 
         if (latestSpawnTarget == null) {
             latestSpawnTarget = computeSpawnTarget(controles.getCamera());
@@ -575,5 +668,231 @@ public class RenderPanel extends JPanel {
             menu.confirmSpawn();
         }
         setTransientMessage("Animal colocado", new Color(120, 255, 120), 2000);
+    }
+    
+    private void updateHoveredAnimal(List<Renderable> entidades, Camera cam, Controles controles) {
+        if (entidades == null || cam == null || controles == null) return;
+        if (controles.isPaused()) return;
+        
+        // Clear previous hover state
+        if (hoveredAnimal != null) {
+            hoveredAnimal.setHovered(false);
+        }
+        hoveredAnimal = null;
+        
+        // Don't detect hover if spawn menu is open
+        AnimalSpawnerMenu menu = controles.getSpawnerMenu();
+        if (menu != null && (menu.isOpen() || menu.isWaitingForPosition())) {
+            return;
+        }
+        
+        // Ray from camera through center of screen
+        Vector3 rayOrigin = cam.getPosicion();
+        Vector3 rayDir = cam.getForward();
+        
+        double closestDist = Double.POSITIVE_INFINITY;
+        entities.BaseAnimal closest = null;
+        
+        for (Renderable r : entidades) {
+            if (r instanceof entities.BaseAnimal) {
+                entities.BaseAnimal animal = (entities.BaseAnimal) r;
+                
+                // Simple AABB ray intersection
+                Vector3 aabbMin = animal.getAABBMin();
+                Vector3 aabbMax = animal.getAABBMax();
+                
+                double tMin = (aabbMin.x - rayOrigin.x) / (rayDir.x + 0.0001);
+                double tMax = (aabbMax.x - rayOrigin.x) / (rayDir.x + 0.0001);
+                if (tMin > tMax) { double t = tMin; tMin = tMax; tMax = t; }
+                
+                double tyMin = (aabbMin.y - rayOrigin.y) / (rayDir.y + 0.0001);
+                double tyMax = (aabbMax.y - rayOrigin.y) / (rayDir.y + 0.0001);
+                if (tyMin > tyMax) { double t = tyMin; tyMin = tyMax; tyMax = t; }
+                
+                if (tMin > tyMax || tyMin > tMax) continue;
+                if (tyMin > tMin) tMin = tyMin;
+                if (tyMax < tMax) tMax = tyMax;
+                
+                double tzMin = (aabbMin.z - rayOrigin.z) / (rayDir.z + 0.0001);
+                double tzMax = (aabbMax.z - rayOrigin.z) / (rayDir.z + 0.0001);
+                if (tzMin > tzMax) { double t = tzMin; tzMin = tzMax; tzMax = t; }
+                
+                if (tMin > tzMax || tzMin > tMax) continue;
+                if (tzMin > tMin) tMin = tzMin;
+                
+                if (tMin > 0 && tMin < closestDist && tMin < 500) { // Max distance 500
+                    closestDist = tMin;
+                    closest = animal;
+                }
+            }
+        }
+        
+        if (closest != null) {
+            hoveredAnimal = closest;
+            hoveredAnimal.setHovered(true);
+        }
+    }
+    
+    private void drawAnimalInfoPanel() {
+        if (selectedAnimal == null || !animalPanelActive) return;
+        
+        BufferedImage buffer = renderer.getBuffer();
+        if (buffer == null) return;
+        
+        // Panel dimensions and position
+        int panelWidth = 300;
+        int panelHeight = 200;
+        int panelX = ancho - (int)(panelWidth * animalPanelSlideProgress);
+        int panelY = alto / 2 - panelHeight / 2;
+        
+        // Draw gradient background with borders
+        Color bgColor1 = new Color(20, 25, 40); // Darker top
+        Color bgColor2 = new Color(35, 45, 65); // Lighter bottom
+        
+        for (int y = panelY; y < panelY + panelHeight; y++) {
+            for (int x = panelX; x < panelX + panelWidth; x++) {
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    try {
+                        // Gradient effect
+                        float gradientFactor = (float)(y - panelY) / panelHeight;
+                        int r = (int)(bgColor1.getRed() * (1 - gradientFactor) + bgColor2.getRed() * gradientFactor);
+                        int g = (int)(bgColor1.getGreen() * (1 - gradientFactor) + bgColor2.getGreen() * gradientFactor);
+                        int b = (int)(bgColor1.getBlue() * (1 - gradientFactor) + bgColor2.getBlue() * gradientFactor);
+                        Color panelColor = new Color(r, g, b, 230);
+                        buffer.setRGB(x, y, panelColor.getRGB());
+                    } catch (Exception e) {}
+                }
+            }
+        }
+        
+        // Draw outer border (bright cyan glow)
+        Color outerBorder = new Color(100, 200, 255);
+        for (int x = panelX; x < panelX + panelWidth; x++) {
+            if (x >= 0 && x < ancho) {
+                try {
+                    for (int i = 0; i < 3; i++) {
+                        if (panelY - i >= 0) buffer.setRGB(x, panelY - i, outerBorder.getRGB());
+                        if (panelY + panelHeight + i < alto) buffer.setRGB(x, panelY + panelHeight + i, outerBorder.getRGB());
+                    }
+                } catch (Exception e) {}
+            }
+        }
+        for (int y = panelY; y < panelY + panelHeight; y++) {
+            if (y >= 0 && y < alto) {
+                try {
+                    for (int i = 0; i < 3; i++) {
+                        if (panelX - i >= 0) buffer.setRGB(panelX - i, y, outerBorder.getRGB());
+                        if (panelX + panelWidth + i < ancho) buffer.setRGB(panelX + panelWidth + i, y, outerBorder.getRGB());
+                    }
+                } catch (Exception e) {}
+            }
+        }
+        
+        // Draw inner border
+        Color innerBorder = new Color(150, 220, 255);
+        for (int x = panelX; x < panelX + panelWidth; x++) {
+            if (x >= 0 && x < ancho) {
+                try {
+                    buffer.setRGB(x, panelY, innerBorder.getRGB());
+                    buffer.setRGB(x, panelY + panelHeight - 1, innerBorder.getRGB());
+                } catch (Exception e) {}
+            }
+        }
+        for (int y = panelY; y < panelY + panelHeight; y++) {
+            if (y >= 0 && y < alto) {
+                try {
+                    buffer.setRGB(panelX, y, innerBorder.getRGB());
+                    buffer.setRGB(panelX + panelWidth - 1, y, innerBorder.getRGB());
+                } catch (Exception e) {}
+            }
+        }
+        
+        // Draw title bar with gradient
+        Color titleBg1 = new Color(50, 100, 150);
+        Color titleBg2 = new Color(70, 130, 180);
+        for (int y = panelY + 2; y < panelY + 35; y++) {
+            for (int x = panelX + 2; x < panelX + panelWidth - 2; x++) {
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    try {
+                        float grad = (float)(y - panelY - 2) / 33;
+                        int r = (int)(titleBg1.getRed() * (1 - grad) + titleBg2.getRed() * grad);
+                        int g = (int)(titleBg1.getGreen() * (1 - grad) + titleBg2.getGreen() * grad);
+                        int b = (int)(titleBg1.getBlue() * (1 - grad) + titleBg2.getBlue() * grad);
+                        buffer.setRGB(x, y, new Color(r, g, b).getRGB());
+                    } catch (Exception e) {}
+                }
+            }
+        }
+        
+        // Draw title
+        PixelFont.drawText(renderer, panelX + 15, panelY + 10, "ANIMAL", 2, new Color(200, 230, 255));
+        
+        // Draw animal ID with larger font
+        String animalInfo = "ID: #" + selectedAnimal.getAnimalId();
+        PixelFont.drawText(renderer, panelX + 15, panelY + 50, animalInfo, 3, new Color(255, 255, 150));
+        
+        // Draw decorative line
+        Color lineColor = new Color(100, 180, 220);
+        for (int x = panelX + 15; x < panelX + panelWidth - 15; x++) {
+            if (x >= 0 && x < ancho && panelY + 75 >= 0 && panelY + 75 < alto) {
+                try {
+                    buffer.setRGB(x, panelY + 75, lineColor.getRGB());
+                } catch (Exception e) {}
+            }
+        }
+        
+        // Draw delete button with hover effect
+        int buttonWidth = 200;
+        int buttonHeight = 35;
+        int buttonX = panelX + (panelWidth - buttonWidth) / 2;
+        int buttonY = panelY + panelHeight - 55;
+        
+        deleteAnimalButton = new ButtonBounds(buttonX, buttonY, buttonWidth, buttonHeight, "delete_animal");
+        
+        // Button background with gradient
+        Color btnBg1 = new Color(180, 40, 40);
+        Color btnBg2 = new Color(220, 60, 60);
+        for (int y = buttonY; y < buttonY + buttonHeight; y++) {
+            for (int x = buttonX; x < buttonX + buttonWidth; x++) {
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    try {
+                        float grad = (float)(y - buttonY) / buttonHeight;
+                        int r = (int)(btnBg1.getRed() * (1 - grad) + btnBg2.getRed() * grad);
+                        int g = (int)(btnBg1.getGreen() * (1 - grad) + btnBg2.getGreen() * grad);
+                        int b = (int)(btnBg1.getBlue() * (1 - grad) + btnBg2.getBlue() * grad);
+                        buffer.setRGB(x, y, new Color(r, g, b).getRGB());
+                    } catch (Exception e) {}
+                }
+            }
+        }
+        
+        // Button border with glow
+        Color buttonBorder = new Color(255, 100, 100);
+        for (int x = buttonX; x < buttonX + buttonWidth; x++) {
+            if (x >= 0 && x < ancho) {
+                try {
+                    for (int i = 0; i < 2; i++) {
+                        if (buttonY - i >= 0) buffer.setRGB(x, buttonY - i, buttonBorder.getRGB());
+                        if (buttonY + buttonHeight + i < alto) buffer.setRGB(x, buttonY + buttonHeight + i, buttonBorder.getRGB());
+                    }
+                } catch (Exception e) {}
+            }
+        }
+        for (int y = buttonY; y < buttonY + buttonHeight; y++) {
+            if (y >= 0 && y < alto) {
+                try {
+                    for (int i = 0; i < 2; i++) {
+                        if (buttonX - i >= 0) buffer.setRGB(buttonX - i, y, buttonBorder.getRGB());
+                        if (buttonX + buttonWidth + i < ancho) buffer.setRGB(buttonX + buttonWidth + i, y, buttonBorder.getRGB());
+                    }
+                } catch (Exception e) {}
+            }
+        }
+        
+        // Button text
+        PixelFont.drawText(renderer, buttonX + 35, buttonY + 10, "ELIMINAR", 2, Color.WHITE);
+        
+        // Draw ESC hint
+        PixelFont.drawText(renderer, panelX + 15, panelY + panelHeight - 20, "ESC para cerrar", 1, new Color(150, 150, 150));
     }
 }

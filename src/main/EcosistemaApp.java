@@ -54,6 +54,14 @@ public class EcosistemaApp {
                 panel.handleMousePressed(e, controles);
             }
         });
+        
+        // Add key listener to handle ESC for closing animal panel
+        panel.addKeyListener(new java.awt.event.KeyAdapter(){
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e){
+                panel.handleKeyPressed(e, controles);
+            }
+        });
 
         // Lock mouse by default so behavior matches Minecraft (cursor hidden & centered,
         // movement uses deltas to update yaw/pitch). If Robot is not available the method

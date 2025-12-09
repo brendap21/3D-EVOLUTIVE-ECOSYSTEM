@@ -15,21 +15,17 @@ import java.util.List;
  * Forma: Asimétrica con protuberancias irregulares.
  * Evolución: Crece de forma caótica, cambia tonos marrones.
  */
-public class AnimalType08 implements Renderable {
-    private Vector3 posicion;
-    private List<Vector3> voxels;
-    private int voxelSize;
-    private Color color;
+public class AnimalType08 extends BaseAnimal {
     private double rotY = 0.0;
     private double bob = 0.0;
     private double speed = 1.4;
-    private long seed;
 
     public AnimalType08(Vector3 posicion, long seed) {
         this.posicion = posicion;
         this.seed = seed;
         this.voxels = new ArrayList<>();
         generateFromSeed(seed);
+        initializeSpawnAnimation();
     }
 
     private void generateFromSeed(long seed) {
@@ -88,20 +84,18 @@ public class AnimalType08 implements Renderable {
     }
 
     @Override
-    public void update() {
-        // Animación deshabilitada
-    }
-
-    @Override
-    public void render(SoftwareRenderer renderer, Camera cam) {
+    protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
+        Color glowColor = applyGlowToColor(color);
         for (Vector3 voxel : voxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
-            renderer.drawCubeShaded(vertices, cam, color);
+            worldPos = applyScaleToPosition(worldPos);
+            int scaledSize = applyScaleToSize(voxelSize);
+            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
+            renderer.drawCubeShaded(vertices, cam, glowColor);
         }
     }
 }

@@ -15,21 +15,17 @@ import java.util.List;
  * Forma: Cabeza pequeña, cuerpo principal rectangular, 4 patas.
  * Evolución: Muta color hacia tonos más brillantes, aumenta velocidad.
  */
-public class AnimalType01 implements Renderable {
-    private Vector3 posicion;
-    private List<Vector3> voxels;
-    private int voxelSize;
-    private Color color;
+public class AnimalType01 extends BaseAnimal {
     private double rotY = 0.0;
     private double bob = 0.0;
     private double speed = 2.5; // faster type
-    private long seed;
 
     public AnimalType01(Vector3 posicion, long seed) {
         this.posicion = posicion;
         this.seed = seed;
         this.voxels = new ArrayList<>();
         generateFromSeed(seed);
+        initializeSpawnAnimation();
     }
 
     private void generateFromSeed(long seed) {
@@ -86,20 +82,19 @@ public class AnimalType01 implements Renderable {
     }
 
     @Override
-    public void update() {
-        // Animación deshabilitada
-    }
-
-    @Override
-    public void render(SoftwareRenderer renderer, Camera cam) {
+    protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
+        Color glowColor = applyGlowToColor(color);
+        
         for (Vector3 voxel : voxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
-            renderer.drawCubeShaded(vertices, cam, color);
+            worldPos = applyScaleToPosition(worldPos);
+            int scaledSize = applyScaleToSize(voxelSize);
+            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
+            renderer.drawCubeShaded(vertices, cam, glowColor);
         }
         
         // Draw eyes (small white cubes)
@@ -107,7 +102,10 @@ public class AnimalType01 implements Renderable {
         Vector3 eyeLeft = new Vector3(headPos.x - voxelSize * 0.3, headPos.y + voxelSize * 0.2, headPos.z - voxelSize * 0.3);
         Vector3 eyeRight = new Vector3(headPos.x + voxelSize * 0.3, headPos.y + voxelSize * 0.2, headPos.z - voxelSize * 0.3);
         
-        int eyeSize = (int)(voxelSize * 0.25);
+        eyeLeft = applyScaleToPosition(eyeLeft);
+        eyeRight = applyScaleToPosition(eyeRight);
+        
+        int eyeSize = applyScaleToSize((int)(voxelSize * 0.25));
         Vector3[] eyeVerticesL = renderer.getCubeVertices(eyeLeft, eyeSize, 0);
         Vector3[] eyeVerticesR = renderer.getCubeVertices(eyeRight, eyeSize, 0);
         renderer.drawCubeShaded(eyeVerticesL, cam, new Color(255, 255, 255));

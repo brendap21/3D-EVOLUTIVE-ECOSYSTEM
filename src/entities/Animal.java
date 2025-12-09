@@ -23,12 +23,36 @@ public class Animal implements Renderable {
     private double bob = 0.0;
     private double speed = 1.0; // affects animation speed
     private long seed;
+    
+    // Spawn animation
+    private boolean isSpawning = true;
+    private double spawnProgress = 0.0; // 0.0 to 1.0
+    private static final double SPAWN_DURATION = 3.0; // seconds
+    private List<SpawnParticle> spawnParticles = new ArrayList<>();
+    
+    private static class SpawnParticle {
+        double angle;
+        double height;
+        double radius;
+        double speed;
+        int voxelIndex;
+        
+        SpawnParticle(double angle, double height, double radius, double speed, int voxelIndex) {
+            this.angle = angle;
+            this.height = height;
+            this.radius = radius;
+            this.speed = speed;
+            this.voxelIndex = voxelIndex;
+        }
+    }
 
     public Animal(Vector3 posicion, long seed){
         this.posicion = posicion;
         this.seed = seed;
         this.voxels = new ArrayList<>();
         generateFromSeed(seed);
+        initializeSpawnAnimation();
+        System.out.println("Animal creado - spawn animation iniciada. Particles: " + spawnParticles.size());
     }
 
     // Additional constructor used for deserialization
@@ -38,6 +62,8 @@ public class Animal implements Renderable {
         this.color = color;
         this.voxelSize = voxelSize;
         this.voxels = new ArrayList<>(voxels);
+        this.isSpawning = false; // Already spawned
+        this.spawnProgress = 1.0;
     }
 
     private void generateFromSeed(long seed){
@@ -92,6 +118,21 @@ public class Animal implements Renderable {
                 int idx = r.nextInt(voxels.size());
                 Vector3 base = voxels.get(idx);
                 voxels.add(new Vector3(base.x, 1.0, base.z));
+            }
+        }
+    }
+    
+    private void initializeSpawnAnimation() {
+        Random r = new Random(seed + 999);
+        // Crear partículas en espiral para cada voxel
+        for (int i = 0; i < voxels.size(); i++) {
+            int particlesPerVoxel = 5; // Más partículas
+            for (int p = 0; p < particlesPerVoxel; p++) {
+                double angle = r.nextDouble() * Math.PI * 2;
+                double height = -50 - r.nextDouble() * 30; // Start much lower
+                double radius = 20 + r.nextDouble() * 25; // Wider spiral
+                double speed = 0.8 + r.nextDouble() * 0.4;
+                spawnParticles.add(new SpawnParticle(angle, height, radius, speed, i));
             }
         }
     }
@@ -183,20 +224,121 @@ public class Animal implements Renderable {
 
     @Override
     public void update(){
-        // Animación deshabilitada
+        if (isSpawning) {
+            spawnProgress += 0.016 / SPAWN_DURATION; // ~60 FPS
+            if (spawnProgress >= 1.0) {
+                spawnProgress = 1.0;
+                isSpawning = false;
+                spawnParticles.clear();
+                System.out.println("Spawn animation completada!");
+            }
+        }
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam){
-        // Render each voxel as a cube sin bobbing ni rotación
-        for(Vector3 off : voxels){
-            Vector3 world = new Vector3(
-                posicion.x + off.x * voxelSize,
-                posicion.y + off.y * voxelSize,
-                posicion.z + off.z * voxelSize
-            );
-            Vector3[] verts = renderer.getCubeVertices(world, voxelSize, 0); // rotY = 0
-            renderer.drawCube(verts, cam, color);
+        if (isSpawning) {
+            renderSpawnAnimation(renderer, cam);
+        } else {
+            // Render normal - each voxel as a cube
+            for(Vector3 off : voxels){
+                Vector3 world = new Vector3(
+                    posicion.x + off.x * voxelSize,
+                    posicion.y + off.y * voxelSize,
+                    posicion.z + off.z * voxelSize
+                );
+                Vector3[] verts = renderer.getCubeVertices(world, voxelSize, 0);
+                renderer.drawCube(verts, cam, color);
+            }
+        }
+    }
+    
+    private void renderSpawnAnimation(SoftwareRenderer renderer, Camera cam) {
+        System.out.println("Rendering spawn animation - progress: " + spawnProgress);
+        // Fase 1 (0.0 - 0.5): Partículas en espiral convergiendo
+        if (spawnProgress < 0.5) {
+            double particlePhase = spawnProgress / 0.5;
+            for (SpawnParticle p : spawnParticles) {
+                // Las partículas suben en espiral hacia su voxel objetivo
+                double targetY = voxels.get(p.voxelIndex).y * voxelSize + posicion.y;
+                double currentRadius = p.radius * (1.0 - particlePhase);
+                double currentHeight = p.height + (targetY - p.height) * particlePhase;
+                double spiralAngle = p.angle + particlePhase * Math.PI * 6 * p.speed;
+                
+                double px = posicion.x + Math.cos(spiralAngle) * currentRadius;
+                double py = currentHeight;
+                double pz = posicion.z + Math.sin(spiralAngle) * currentRadius;
+                
+                // Renderizar partícula como cubo brillante más grande
+                int particleSize = 6 + (int)(4 * particlePhase);
+                Vector3[] particleVerts = renderer.getCubeVertices(new Vector3(px, py, pz), particleSize, 0);
+                
+                // Color brillante que va hacia el color del animal
+                Color particleColor = new Color(255, 255, 150);
+                renderer.drawCube(particleVerts, cam, particleColor);
+            }
+        }
+        
+        // Fase 2 (0.4 - 1.0): Voxels aparecen con rotación y escala
+        if (spawnProgress > 0.4) {
+            double voxelPhase = Math.min(1.0, (spawnProgress - 0.4) / 0.6);
+            
+            for (int i = 0; i < voxels.size(); i++) {
+                Vector3 off = voxels.get(i);
+                
+                // Cada voxel aparece secuencialmente
+                double voxelDelay = (double)i / voxels.size() * 0.3;
+                double individualProgress = Math.max(0, Math.min(1.0, (voxelPhase - voxelDelay) / 0.7));
+                
+                if (individualProgress > 0) {
+                    // Escala desde 0 a tamaño completo con bounce
+                    double scale = individualProgress < 0.8 
+                        ? individualProgress / 0.8 
+                        : 1.0 + Math.sin((individualProgress - 0.8) / 0.2 * Math.PI) * 0.3;
+                    
+                    // Rotación durante aparición
+                    double spinRotation = (1.0 - individualProgress) * Math.PI * 4;
+                    
+                    Vector3 world = new Vector3(
+                        posicion.x + off.x * voxelSize,
+                        posicion.y + off.y * voxelSize + (1.0 - individualProgress) * 15, // Baja desde más arriba
+                        posicion.z + off.z * voxelSize
+                    );
+                    
+                    int scaledSize = Math.max(1, (int)(voxelSize * scale));
+                    Vector3[] verts = renderer.getCubeVertices(world, scaledSize, spinRotation);
+                    
+                    // Color con destello
+                    float glow = (float)(Math.max(0, 1.5 - individualProgress * 1.5));
+                    Color voxelColor = new Color(
+                        Math.min(1.0f, color.getRed() / 255f + glow * 0.5f),
+                        Math.min(1.0f, color.getGreen() / 255f + glow * 0.5f),
+                        Math.min(1.0f, color.getBlue() / 255f + glow * 0.5f)
+                    );
+                    renderer.drawCube(verts, cam, voxelColor);
+                }
+            }
+            
+            // Fase 3 (0.85 - 1.0): Destello final expansivo
+            if (spawnProgress > 0.85) {
+                double burstPhase = (spawnProgress - 0.85) / 0.15;
+                int burstParticles = 16;
+                
+                for (int i = 0; i < burstParticles; i++) {
+                    double angle = (i / (double)burstParticles) * Math.PI * 2;
+                    double burstRadius = burstPhase * 30;
+                    double burstHeight = posicion.y + voxelSize * 2 + burstPhase * 15;
+                    
+                    double bx = posicion.x + Math.cos(angle) * burstRadius;
+                    double by = burstHeight;
+                    double bz = posicion.z + Math.sin(angle) * burstRadius;
+                    
+                    int burstSize = Math.max(1, (int)(6 * (1.0 - burstPhase)));
+                    Vector3[] burstVerts = renderer.getCubeVertices(new Vector3(bx, by, bz), burstSize, 0);
+                    Color burstColor = new Color(255, 255, 100);
+                    renderer.drawCube(burstVerts, cam, burstColor);
+                }
+            }
         }
     }
 
