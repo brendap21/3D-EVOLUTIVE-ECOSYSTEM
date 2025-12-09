@@ -42,10 +42,14 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     private boolean freeLookBaseSet = false;
     private Mundo mundo;
     private double eyeHeight = 20.0; // camera eye offset above ground (shared) (increased for safety)
+    
+    // Animal spawner menu
+    private AnimalSpawnerMenu spawnerMenu;
 
     public Controles(Camera cam, Component comp) {
         this.cam = cam;
         this.comp = comp;
+        this.spawnerMenu = new AnimalSpawnerMenu();
         try {
             robot = new Robot();
         } catch (Exception ex) {
@@ -118,6 +122,26 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() < 256)
             teclas[e.getKeyCode()] = true;
+        
+        // If spawner menu is open, handle menu-specific keys
+        if (spawnerMenu.isOpen()) {
+            handleSpawnerMenuKeys(e);
+            return;
+        }
+        
+        // If waiting for spawn position and ESC pressed, cancel spawn and return to normal gameplay
+        if (spawnerMenu.isWaitingForPosition() && e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+            spawnerMenu.cancel();
+            if (mundo != null) mundo.setWaitingForSpawn(false);
+            lockMouse(true);
+            return;
+        }
+        
+        // If waiting for spawn position but NOT ESC, consume the event (prevent other keys during spawn)
+        if (spawnerMenu.isWaitingForPosition()) {
+            return;
+        }
+        
         // NOTE: ESC is reserved for pause/menu; do NOT unlock the mouse with ESC.
         // Fly mode is always ON in this build (no toggle)
         // Toggle crosshair with 'C'
@@ -127,6 +151,14 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         // Toggle debug overlay with F3
         if (e.getKeyCode() == KeyEvent.VK_F3) {
             debugOverlay = !debugOverlay;
+        }
+        // Open spawner menu with 'Y'
+        if (e.getKeyCode() == KeyEvent.VK_Y) {
+            spawnerMenu.open();
+            if (mundo != null) {
+                // unlock mouse to allow menu interaction
+                lockMouse(false);
+            }
         }
         // Toggle pause with ESC: when paused, show the menu and stop the game updates.
         if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
@@ -144,6 +176,34 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
             }
         }
     }
+    
+    /**
+     * Maneja las teclas presionadas cuando el menú de spawn está abierto.
+     * Permite navegación con flechas y selección con ENTER.
+     */
+    private void handleSpawnerMenuKeys(KeyEvent e) {
+        int code = e.getKeyCode();
+        
+        if (code == KeyEvent.VK_UP) {
+            spawnerMenu.navigateUp();
+        } else if (code == KeyEvent.VK_DOWN) {
+            spawnerMenu.navigateDown();
+        } else if (code == KeyEvent.VK_ENTER) {
+            // Select current option
+            int animalType = spawnerMenu.selectCurrentOption();
+            if (mundo != null) {
+                mundo.setSelectedAnimalType(animalType);
+                mundo.setWaitingForSpawn(true);
+            }
+            // close menu interaction and re-lock mouse for aiming
+            lockMouse(true);
+        } else if (code == KeyEvent.VK_ESCAPE) {
+            // Cancel menu
+            spawnerMenu.cancel();
+            if (mundo != null) mundo.setWaitingForSpawn(false);
+            lockMouse(true);
+        }
+    }
 
     @Override
     public void keyReleased(KeyEvent e) {
@@ -153,6 +213,13 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
 
     @Override
     public void mouseMoved(MouseEvent e) {
+        // Don't apply camera rotation if spawner menu is open
+        if (spawnerMenu.isOpen()) {
+            lastX = e.getX();
+            lastY = e.getY();
+            return;
+        }
+        
         if (mouseLocked) {
             if (robot == null) return;
             // Use screen coordinates so we can recenter with Robot
@@ -193,6 +260,11 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     }
 
     public void actualizar() {
+        // Freeze camera while the spawn menu is open
+        if (spawnerMenu.isOpen()) {
+            return;
+        }
+
         // Update camera orientation from mouse position when not locked (absolute mapping)
         if (!mouseLocked) {
             // compute baseline yaw/pitch once when entering free-look
@@ -333,4 +405,6 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
     public boolean isDebugOverlayEnabled(){ return debugOverlay; }
     
     public Camera getCamera(){ return cam; }
+    
+    public AnimalSpawnerMenu getSpawnerMenu() { return spawnerMenu; }
 }

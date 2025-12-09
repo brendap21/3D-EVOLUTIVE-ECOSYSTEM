@@ -13,7 +13,7 @@ import java.util.Random;
  * Árbol: Entidad ambiental con tronco y copa.
  * Variación de tamaño realista.
  */
-public class Arbol implements Renderable {
+public class Arbol implements Renderable, Collidable {
     private Vector3 posicion;
     private List<Vector3> trunkVoxels;
     private List<Vector3> canopyVoxels;
@@ -109,5 +109,47 @@ public class Arbol implements Renderable {
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
             renderer.drawCubeShaded(vertices, cam, canopyColor);
         }
+    }
+
+    @Override
+    public Vector3 getAABBMin() {
+        // Calculate min based on trunk and canopy voxels
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double minZ = Double.POSITIVE_INFINITY;
+        
+        for (Vector3 v : trunkVoxels) {
+            minX = Math.min(minX, posicion.x + v.x * voxelSize - voxelSize/2.0);
+            minY = Math.min(minY, posicion.y + v.y * voxelSize - voxelSize/2.0);
+            minZ = Math.min(minZ, posicion.z + v.z * voxelSize - voxelSize/2.0);
+        }
+        for (Vector3 v : canopyVoxels) {
+            minX = Math.min(minX, posicion.x + v.x * voxelSize - voxelSize/2.0);
+            minY = Math.min(minY, posicion.y + v.y * voxelSize - voxelSize/2.0);
+            minZ = Math.min(minZ, posicion.z + v.z * voxelSize - voxelSize/2.0);
+        }
+        
+        return new Vector3(minX, minY, minZ);
+    }
+
+    @Override
+    public Vector3 getAABBMax() {
+        // Calculate max based on trunk and canopy voxels
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        double maxZ = Double.NEGATIVE_INFINITY;
+        
+        for (Vector3 v : trunkVoxels) {
+            maxX = Math.max(maxX, posicion.x + v.x * voxelSize + voxelSize/2.0);
+            maxY = Math.max(maxY, posicion.y + v.y * voxelSize + voxelSize/2.0);
+            maxZ = Math.max(maxZ, posicion.z + v.z * voxelSize + voxelSize/2.0);
+        }
+        for (Vector3 v : canopyVoxels) {
+            maxX = Math.max(maxX, posicion.x + v.x * voxelSize + voxelSize/2.0);
+            maxY = Math.max(maxY, posicion.y + v.y * voxelSize + voxelSize/2.0);
+            maxZ = Math.max(maxZ, posicion.z + v.z * voxelSize + voxelSize/2.0);
+        }
+        
+        return new Vector3(maxX, maxY, maxZ);
     }
 }

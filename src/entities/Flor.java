@@ -12,7 +12,7 @@ import java.util.Random;
 /**
  * Flor: Entidad decorativa pequeña con variación de tamaño y color.
  */
-public class Flor implements Renderable {
+public class Flor implements Renderable, Collidable {
     private Vector3 posicion;
     private List<Vector3> petalos;
     private Vector3 centro;
@@ -78,5 +78,21 @@ public class Flor implements Renderable {
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
             renderer.drawCubeShaded(vertices, cam, colorPetalo);
         }
+    }
+
+    @Override
+    public Vector3 getAABBMin() {
+        double minX = posicion.x - 2 * voxelSize;
+        double minY = posicion.y;
+        double minZ = posicion.z - 2 * voxelSize;
+        return new Vector3(minX, minY, minZ);
+    }
+
+    @Override
+    public Vector3 getAABBMax() {
+        double maxX = posicion.x + 2 * voxelSize;
+        double maxY = posicion.y + 2 * voxelSize;
+        double maxZ = posicion.z + 2 * voxelSize;
+        return new Vector3(maxX, maxY, maxZ);
     }
 }

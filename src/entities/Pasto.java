@@ -13,7 +13,7 @@ import java.util.Random;
  * Pasto: Entidad pequeña que simula hierba.
  * Múltiples tallos delgados para efecto de grupo de hierba.
  */
-public class Pasto implements Renderable {
+public class Pasto implements Renderable, Collidable {
     private Vector3 posicion;
     private List<Vector3> voxels;
     private int voxelSize;
@@ -79,5 +79,17 @@ public class Pasto implements Renderable {
             Color grassColor = colors[i % colors.length];
             renderer.drawCubeShaded(vertices, cam, grassColor);
         }
+    }
+
+    @Override
+    public Vector3 getAABBMin() {
+        // Small AABB for grass
+        return new Vector3(posicion.x - 3, posicion.y, posicion.z - 3);
+    }
+
+    @Override
+    public Vector3 getAABBMax() {
+        // Max height based on typical grass height
+        return new Vector3(posicion.x + 3, posicion.y + 12, posicion.z + 3);
     }
 }

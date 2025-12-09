@@ -61,7 +61,7 @@ public class EcosistemaApp {
         controles.lockMouse(true);
 
     // Start the renderer thread using the world's entity list
-    RenderThread hilo = new RenderThread(panel, mundo.getEntities(), cam, controles);
+    RenderThread hilo = new RenderThread(panel, mundo, cam, controles);
     hilo.start();
 
     // Start the simulation thread that mutates animals deterministically

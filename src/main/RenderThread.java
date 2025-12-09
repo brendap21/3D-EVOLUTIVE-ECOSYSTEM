@@ -1,18 +1,20 @@
 package main;
 
-import java.util.List;
 import math.Camera;
+import java.util.Collections;
+import java.util.List;
+import simulation.Mundo;
 import ui.Controles;
 
 public class RenderThread extends Thread {
     private RenderPanel panel;
-    private List<Renderable> entidades;
+    private Mundo mundo;
     private Camera cam;
     private Controles controles;
 
-    public RenderThread(RenderPanel panel, List<Renderable> entidades, Camera cam, Controles controles){
+    public RenderThread(RenderPanel panel, Mundo mundo, Camera cam, Controles controles){
         this.panel = panel;
-        this.entidades = entidades;
+        this.mundo = mundo;
         this.cam = cam;
         this.controles = controles;
     }
@@ -25,7 +27,8 @@ public class RenderThread extends Thread {
             // actualizaciones dependientes del input.
             if(controles != null && !controles.isPaused()) controles.actualizar();
 
-            panel.render(entidades, cam, controles);
+            List<Renderable> snapshot = mundo != null ? mundo.snapshotEntities() : Collections.emptyList();
+            panel.render(snapshot, cam, controles);
 
             try { Thread.sleep(7); } catch(Exception e){} // 7ms = ~143 FPS (mucho más fluido)
         }

@@ -14,12 +14,16 @@ public class Mundo {
     private final List<Animal> animales = new ArrayList<>();
     private Animal selectedAnimal = null;
     private boolean waitingForSpawnPosition = false;
+    private int selectedAnimalType = -1; // tipo de animal a generar (-1=random, 0-9=tipo específico)
 
     public Mundo(){ }
 
     public synchronized void addEntity(Renderable e){ entidades.add(e); }
     public synchronized void removeEntity(Renderable e){ entidades.remove(e); }
-    public synchronized List<Renderable> getEntities(){ return entidades; }
+    // Return a defensive copy to avoid concurrent modification during iteration
+    public synchronized List<Renderable> getEntities(){ return new ArrayList<>(entidades); }
+    // Explicit snapshot helper used by the renderer to iterate safely across threads
+    public synchronized List<Renderable> snapshotEntities(){ return new ArrayList<>(entidades); }
 
     public synchronized void addAnimal(Animal a){ animales.add(a); entidades.add(a); }
     public synchronized void removeAnimal(Animal a){ animales.remove(a); entidades.remove(a); }
@@ -55,4 +59,8 @@ public class Mundo {
     
     public synchronized void setWaitingForSpawn(boolean waiting){ this.waitingForSpawnPosition = waiting; }
     public synchronized boolean isWaitingForSpawn(){ return waitingForSpawnPosition; }
+    
+    // Animal type for spawning
+    public synchronized void setSelectedAnimalType(int type){ this.selectedAnimalType = type; }
+    public synchronized int getSelectedAnimalType(){ return selectedAnimalType; }
 }
