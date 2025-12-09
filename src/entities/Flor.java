@@ -7,10 +7,10 @@ import math.Camera;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
- * Flor: Pequeña entidad ornamental decorativa.
- * Animación: Rotación vertical suave (como una flor mecánica).
+ * Flor: Entidad decorativa pequeña con variación de tamaño y color.
  */
 public class Flor implements Renderable {
     private Vector3 posicion;
@@ -20,47 +20,64 @@ public class Flor implements Renderable {
     private Color colorPetalo;
     private Color colorCentro;
     private double rotY = 0.0;
+    private long seed;
 
     public Flor(Vector3 posicion, Color colorPetalo) {
+        this(posicion, colorPetalo, System.currentTimeMillis());
+    }
+
+    public Flor(Vector3 posicion, Color colorPetalo, long seed) {
         this.posicion = posicion;
-        this.voxelSize = 6;
+        this.seed = seed;
         this.colorPetalo = colorPetalo;
-        this.colorCentro = new Color(255, 200, 0); // yellow center
+        this.colorCentro = new Color(255, 220, 80); // amarillo cálido
         this.centro = new Vector3(0, 1, 0);
         this.petalos = new ArrayList<>();
+        
+        Random r = new Random(seed);
+        // Tamaño variable: 1-3 píxeles (flores MÁS PEQUEÑAS - reducido a la mitad)
+        this.voxelSize = 1 + r.nextInt(3);
+        
         generateFlower();
     }
 
     private void generateFlower() {
-        // 4-6 petals around center
-        petalos.add(new Vector3(1, 1, 0));
-        petalos.add(new Vector3(-1, 1, 0));
-        petalos.add(new Vector3(0, 1, 1));
-        petalos.add(new Vector3(0, 1, -1));
+        Random r = new Random(seed);
+        // 4 pétalos en cruz
+        petalos.add(new Vector3(1.5, 0.5, 0));
+        petalos.add(new Vector3(-1.5, 0.5, 0));
+        petalos.add(new Vector3(0, 0.5, 1.5));
+        petalos.add(new Vector3(0, 0.5, -1.5));
+        
+        // Añadir 1-2 pétalos diagonales
+        if (r.nextDouble() < 0.6) {
+            petalos.add(new Vector3(1, 0.5, 1));
+            petalos.add(new Vector3(-1, 0.5, -1));
+        }
     }
 
     @Override
     public void update() {
-        rotY += 0.01;
+        rotY += 0.012;
         if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        // Draw center
+        // Centro
         Vector3 centerPos = new Vector3(posicion.x, posicion.y + centro.y * voxelSize, posicion.z);
-        Vector3[] centerVerts = renderer.getCubeVertices(centerPos, voxelSize + 2, rotY);
-        renderer.drawCube(centerVerts, cam, colorCentro);
+        Vector3[] centerVerts = renderer.getCubeVertices(centerPos, voxelSize + 1, rotY);
+        renderer.drawCubeShaded(centerVerts, cam, colorCentro);
 
-        // Draw petals
+        // Pétalos
         for (Vector3 petalo : petalos) {
             Vector3 worldPos = new Vector3(
-                posicion.x + petalo.x * voxelSize * 2,
+                posicion.x + petalo.x * voxelSize,
                 posicion.y + petalo.y * voxelSize,
-                posicion.z + petalo.z * voxelSize * 2
+                posicion.z + petalo.z * voxelSize
             );
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, rotY);
-            renderer.drawCube(vertices, cam, colorPetalo);
+            renderer.drawCubeShaded(vertices, cam, colorPetalo);
         }
     }
 }

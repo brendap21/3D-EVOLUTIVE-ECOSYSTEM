@@ -27,7 +27,7 @@ public class RenderThread extends Thread {
 
             panel.render(entidades, cam, controles);
 
-            try { Thread.sleep(16); } catch(Exception e){}
+            try { Thread.sleep(7); } catch(Exception e){} // 7ms = ~143 FPS (mucho más fluido)
         }
     }
 }

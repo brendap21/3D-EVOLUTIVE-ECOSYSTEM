@@ -9,8 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Arbusto: Entidad ambiental, versión compacta y redondeada del árbol.
- * Animación: Oscilación lateral leve del follaje.
+ * Arbusto: Entidad ambiental pequeña y compacta.
+ * Mucho más pequeño que un árbol, aspecto de arbusto bajo.
  */
 public class Arbusto implements Renderable {
     private Vector3 posicion;
@@ -21,25 +21,21 @@ public class Arbusto implements Renderable {
 
     public Arbusto(Vector3 posicion) {
         this.posicion = posicion;
-        this.voxelSize = 12;
-        this.color = new Color(85, 107, 47); // dark yellow-green (olive)
+        this.voxelSize = 4; // voxel muy pequeño
+        this.color = new Color(60, 95, 45); // verde oscuro realista
         this.foliageVoxels = new ArrayList<>();
         generateBush();
     }
 
     private void generateBush() {
-        // Compact spherical shape: fewer voxels than tree
-        int r = 2;
-        for (int x = -r; x <= r; x++) {
-            for (int y = 0; y <= r; y++) {
-                for (int z = -r; z <= r; z++) {
-                    double dist = Math.sqrt(x*x + y*y + z*z);
-                    if (dist <= r && dist > r - 1.2) {
-                        foliageVoxels.add(new Vector3(x, y, z));
-                    }
-                }
-            }
-        }
+        // Forma muy compacta: solo 5-7 voxels en patrón bajo
+        // Arbusto esférico compacto (radio 1)
+        foliageVoxels.add(new Vector3(0, 0, 0));   // Centro base
+        foliageVoxels.add(new Vector3(1, 0, 0));   // Derecha
+        foliageVoxels.add(new Vector3(-1, 0, 0));  // Izquierda
+        foliageVoxels.add(new Vector3(0, 0, 1));   // Frente
+        foliageVoxels.add(new Vector3(0, 0, -1));  // Atrás
+        foliageVoxels.add(new Vector3(0, 1, 0));   // Arriba
     }
 
     @Override
@@ -50,20 +46,16 @@ public class Arbusto implements Renderable {
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        Vector3 center = new Vector3(
-            posicion.x + Math.sin(sway) * 2,
-            posicion.y,
-            posicion.z + Math.cos(sway) * 2
-        );
+        double swayOffset = Math.sin(sway) * 0.8; // muy sutil
         
         for (Vector3 voxel : foliageVoxels) {
             Vector3 worldPos = new Vector3(
-                center.x + voxel.x * voxelSize,
-                center.y + voxel.y * voxelSize,
-                center.z + voxel.z * voxelSize
+                posicion.x + voxel.x * voxelSize + swayOffset,
+                posicion.y + voxel.y * voxelSize,
+                posicion.z + voxel.z * voxelSize
             );
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
-            renderer.drawCube(vertices, cam, color);
+            renderer.drawCubeShaded(vertices, cam, color);
         }
     }
 }

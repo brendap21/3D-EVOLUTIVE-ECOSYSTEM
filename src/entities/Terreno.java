@@ -43,11 +43,9 @@ public class Terreno implements Renderable, HeightProvider {
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam){
-        // Draw a grid-based ground plane using screen-space projection
-        // to ensure perfect pixel alignment with cubes/quads
         double gridSize = 800;
-        double cellSize = 40;
-        int cells = 20;
+        double cellSize = 16; // Aún más pequeño: 16 unidades por celda
+        int cells = 50; // 50x50 = 2500 celdas (grid ultra-denso)
         
         Color col = new Color(
             Math.max(0, baseColor.getRed() - 20),
@@ -57,8 +55,6 @@ public class Terreno implements Renderable, HeightProvider {
         
         double y = 0.0;
         
-        // Pre-project all grid vertices to screen space once
-        // This ensures shared vertices project to identical screen coords
         java.util.HashMap<String, double[]> projCache = new java.util.HashMap<>();
         
         for(int ix = 0; ix <= cells; ix++) {
@@ -68,13 +64,10 @@ public class Terreno implements Renderable, HeightProvider {
                 String key = ix + "," + iz;
                 Vector3 v = new Vector3(x, y, z);
                 double[] proj = renderer.project(v, cam);
-                if (proj != null) {
-                    projCache.put(key, proj);
-                }
+                projCache.put(key, proj);
             }
         }
         
-        // Draw grid cells using projected screen coords
         for(int ix = 0; ix < cells; ix++) {
             for(int iz = 0; iz < cells; iz++) {
                 String k00 = ix + "," + iz;
@@ -88,8 +81,6 @@ public class Terreno implements Renderable, HeightProvider {
                 double[] p11 = projCache.get(k11);
                 
                 if (p00 != null && p10 != null && p01 != null && p11 != null) {
-                    // Use drawQuadScreen (which splits to triangles internally)
-                    // This ensures identical pipeline to cubes
                     renderer.drawQuadScreen(p00, p10, p11, p01, col);
                 }
             }

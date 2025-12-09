@@ -145,25 +145,25 @@ public class EcosistemaApp {
         Random r = new Random(System.currentTimeMillis() + 12345);
         java.util.List<Vector3> usedPositions = new ArrayList<>();
 
-        // Spawn trees (3-5) - fewer for performance
-        int numTrees = 3 + r.nextInt(3);
-        spawnWithMinDistance(mundo, r, numTrees, 100, usedPositions, "tree");
+        // Spawn trees (4-6) - más árboles
+        int numTrees = 4 + r.nextInt(3);
+        spawnWithMinDistance(mundo, r, numTrees, 180, usedPositions, "tree");
 
-        // Spawn rocks (4-8) - reduced
-        int numRocks = 4 + r.nextInt(5);
-        spawnWithMinDistance(mundo, r, numRocks, 50, usedPositions, "rock");
+        // Spawn rocks (5-8)
+        int numRocks = 5 + r.nextInt(4);
+        spawnWithMinDistance(mundo, r, numRocks, 90, usedPositions, "rock");
 
-        // Spawn grass (8-12) - reduced
-        int numGrass = 8 + r.nextInt(5);
-        spawnWithMinDistance(mundo, r, numGrass, 30, usedPositions, "grass");
+        // Spawn grass (80-120) - MUCHÍSIMO MÁS PASTO con separación mínima
+        int numGrass = 80 + r.nextInt(41);
+        spawnWithMinDistance(mundo, r, numGrass, 15, usedPositions, "grass");
 
-        // Spawn bushes (3-6) - reduced
-        int numBushes = 3 + r.nextInt(4);
-        spawnWithMinDistance(mundo, r, numBushes, 60, usedPositions, "bush");
+        // Spawn bushes (4-6)
+        int numBushes = 4 + r.nextInt(3);
+        spawnWithMinDistance(mundo, r, numBushes, 85, usedPositions, "bush");
 
-        // Spawn flowers (2-4) - reduced
-        int numFlowers = 2 + r.nextInt(3);
-        spawnWithMinDistance(mundo, r, numFlowers, 40, usedPositions, "flower");
+        // Spawn flowers (40-60) - más flores pero más pequeñas
+        int numFlowers = 40 + r.nextInt(21);
+        spawnWithMinDistance(mundo, r, numFlowers, 20, usedPositions, "flower");
     }
 
     /**
@@ -173,24 +173,24 @@ public class EcosistemaApp {
                                             double minDistance, java.util.List<Vector3> usedPositions, String type) {
         int spawned = 0;
         int attempts = 0;
-        int maxAttempts = count * 10; // Reasonable attempt limit
+        int maxAttempts = count * 15;
 
         Color[] flowerColors = {
-            new Color(255, 0, 127),   // pink
-            new Color(255, 165, 0),   // orange
-            new Color(255, 255, 0),   // yellow
-            new Color(0, 255, 127),   // spring green
-            new Color(0, 128, 255),   // dodger blue
-            new Color(199, 21, 133)   // medium violet red
+            new Color(255, 20, 147),   // deep pink
+            new Color(255, 105, 180),  // hot pink
+            new Color(255, 165, 0),    // orange
+            new Color(255, 215, 0),    // gold
+            new Color(144, 238, 144),  // light green
+            new Color(0, 206, 209),    // dark turquoise
+            new Color(186, 85, 211),   // medium orchid
+            new Color(255, 20, 147),   // crimson
         };
 
         while (spawned < count && attempts < maxAttempts) {
-            // Expanded range for large terrain (-300 to +300)
-            double x = -300 + r.nextDouble() * 600;
-            double z = -300 + r.nextDouble() * 600;
+            double x = -320 + r.nextDouble() * 640;
+            double z = -320 + r.nextDouble() * 640;
             Vector3 pos = new Vector3(x, 0, z);
 
-            // Check distance from all existing positions
             boolean tooClose = false;
             for (Vector3 used : usedPositions) {
                 double dist = Math.sqrt((pos.x - used.x) * (pos.x - used.x) + 
@@ -203,18 +203,19 @@ public class EcosistemaApp {
 
             if (!tooClose) {
                 usedPositions.add(pos);
+                long seed = System.currentTimeMillis() + spawned * 100 + r.nextLong();
                 
                 switch (type) {
                     case "tree":
-                        Arbol arbol = new Arbol(pos, 10 + r.nextInt(8), 50 + r.nextInt(40), 25 + r.nextInt(20));
+                        Arbol arbol = new Arbol(pos, 12 + r.nextInt(8), 60 + r.nextInt(30), 28 + r.nextInt(15), seed);
                         mundo.addEntity(arbol);
                         break;
                     case "rock":
-                        Piedra piedra = new Piedra(pos);
+                        Piedra piedra = new Piedra(pos, seed);
                         mundo.addEntity(piedra);
                         break;
                     case "grass":
-                        Pasto pasto = new Pasto(pos);
+                        Pasto pasto = new Pasto(pos, seed);
                         mundo.addEntity(pasto);
                         break;
                     case "bush":
@@ -223,7 +224,7 @@ public class EcosistemaApp {
                         break;
                     case "flower":
                         Color flowerColor = flowerColors[r.nextInt(flowerColors.length)];
-                        Flor flor = new Flor(pos, flowerColor);
+                        Flor flor = new Flor(pos, flowerColor, seed);
                         mundo.addEntity(flor);
                         break;
                 }

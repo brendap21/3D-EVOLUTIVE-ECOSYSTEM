@@ -64,40 +64,28 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         this.mundo = m;
         if (this.mundo == null) return;
 
-        // Compute a safe Y so the camera is above the terrain (and any nearby collidable tops).
         math.Vector3 pos = cam.getPosicion();
         double startY = pos.y;
         double safeY = startY;
 
-        // 1) terrain height at camera X,Z
         double terrainH = this.mundo.getHeightAt(pos.x, pos.z);
         if (terrainH != Double.NEGATIVE_INFINITY) {
-            safeY = Math.max(safeY, terrainH + eyeHeight + 1.0); // small buffer
+            safeY = Math.max(safeY, terrainH + eyeHeight + 1.0);
         }
 
-        // 2) consider collidables close to the camera (so we don't spawn inside a cube/cylinder)
-        double nearbyMargin = 16.0; // small margin around camera to consider
+        double nearbyMargin = 16.0;
         java.util.List<entities.Collidable> coll = this.mundo.getCollidables();
         for (entities.Collidable c : coll) {
             math.Vector3 min = c.getAABBMin();
             math.Vector3 max = c.getAABBMax();
-            // check XZ proximity (camera near or above the object footprint)
             if (pos.x + nearbyMargin < min.x || pos.x - nearbyMargin > max.x) continue;
             if (pos.z + nearbyMargin < min.z || pos.z - nearbyMargin > max.z) continue;
-            // use top of AABB as required clearance
             safeY = Math.max(safeY, max.y + eyeHeight + 1.0);
         }
 
-            // Logging removed for production; startup positioning performed silently.
-
-        // Force camera to safe height at world assignment to avoid starting below the terrain.
-        if (terrainH != Double.NEGATIVE_INFINITY) {
-            double forcedY = terrainH + eyeHeight + 1.0;
-            cam.setPosicion(new math.Vector3(pos.x, forcedY, pos.z));
-        } else {
-            if (safeY > startY) {
-                cam.setPosicion(new math.Vector3(pos.x, safeY, pos.z));
-            }
+        // Only adjust upward if we are below the safe height; never force the camera down.
+        if (pos.y < safeY) {
+            cam.setPosicion(new math.Vector3(pos.x, safeY, pos.z));
         }
     }
 

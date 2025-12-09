@@ -7,11 +7,11 @@ import math.Camera;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
- * Árbol: Entidad ambiental compuesta por tronco voxelizado + copa esférica.
- * Optimizado para performance: estructura compacta.
- * Animación: Pequeño balanceo lateral del follaje.
+ * Árbol: Entidad ambiental con tronco y copa.
+ * Variación de tamaño realista.
  */
 public class Arbol implements Renderable {
     private Vector3 posicion;
@@ -21,22 +21,40 @@ public class Arbol implements Renderable {
     private Color trunkColor;
     private Color canopyColor;
     private double sway = 0.0;
+    private long seed;
 
     public Arbol(Vector3 posicion, int trunkRadius, int trunkHeight, int canopyRadius) {
+        this(posicion, trunkRadius, trunkHeight, canopyRadius, System.currentTimeMillis());
+    }
+
+    public Arbol(Vector3 posicion, int trunkRadius, int trunkHeight, int canopyRadius, long seed) {
         this.posicion = posicion;
-        this.voxelSize = 12;
-        this.trunkColor = new Color(85, 50, 25); // brown
-        this.canopyColor = new Color(40, 120, 40); // forest green
+        this.seed = seed;
+        this.voxelSize = 6; // más pequeño para más detalle
         this.trunkVoxels = new ArrayList<>();
         this.canopyVoxels = new ArrayList<>();
+        
+        Random r = new Random(seed);
+        // Colores realistas
+        int trunkRed = 100 + r.nextInt(50);
+        int trunkGreen = 60 + r.nextInt(40);
+        int trunkBlue = 20 + r.nextInt(30);
+        this.trunkColor = new Color(trunkRed, trunkGreen, trunkBlue);
+        
+        int canopyGreen = 80 + r.nextInt(60);
+        int canopyRed = 40 + r.nextInt(30);
+        int canopyBlue = 30 + r.nextInt(30);
+        this.canopyColor = new Color(canopyRed, canopyGreen, canopyBlue);
+        
         generateStructure(trunkRadius, trunkHeight, canopyRadius);
     }
 
     private void generateStructure(int trunkRadius, int trunkHeight, int canopyRadius) {
-        // Trunk: simplified vertical cylinder of voxels
+        Random r = new Random(seed);
         int trunkVoxelRadius = Math.max(1, trunkRadius / voxelSize);
         int trunkVoxelHeight = Math.max(2, trunkHeight / voxelSize);
         
+        // Tronco cilíndrico
         for (int y = 0; y < trunkVoxelHeight; y++) {
             for (int x = -trunkVoxelRadius; x <= trunkVoxelRadius; x++) {
                 for (int z = -trunkVoxelRadius; z <= trunkVoxelRadius; z++) {
@@ -47,7 +65,7 @@ public class Arbol implements Renderable {
             }
         }
         
-        // Canopy: simplified sphere of voxels on top of trunk
+        // Copa esférica
         int canopyVoxelRadius = Math.max(2, canopyRadius / voxelSize);
         int canopyStartY = trunkVoxelHeight;
         
@@ -55,7 +73,7 @@ public class Arbol implements Renderable {
             for (int y = 0; y <= canopyVoxelRadius; y++) {
                 for (int z = -canopyVoxelRadius; z <= canopyVoxelRadius; z++) {
                     double dist = Math.sqrt(x*x + y*y + z*z);
-                    if (dist <= canopyVoxelRadius && dist > canopyVoxelRadius - 1.5) {
+                    if (dist <= canopyVoxelRadius && dist > canopyVoxelRadius - 1.8) {
                         canopyVoxels.add(new Vector3(x, canopyStartY + y, z));
                     }
                 }
@@ -65,13 +83,13 @@ public class Arbol implements Renderable {
 
     @Override
     public void update() {
-        sway += 0.008;
+        sway += 0.006;
         if (sway > 2 * Math.PI) sway -= 2 * Math.PI;
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        // Draw trunk
+        // Tronco
         for (Vector3 voxel : trunkVoxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize,
@@ -82,8 +100,8 @@ public class Arbol implements Renderable {
             renderer.drawCubeShaded(vertices, cam, trunkColor);
         }
 
-        // Draw canopy with sway
-        double swayOffset = Math.sin(sway) * 2;
+        // Copa con movimiento
+        double swayOffset = Math.sin(sway) * 2.5;
         for (Vector3 voxel : canopyVoxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize + swayOffset,

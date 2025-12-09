@@ -7,10 +7,10 @@ import math.Camera;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
- * Piedra: Entidad ambiental compuesta por voxels irregulares.
- * Animación: Rotación lenta y/o pulsación de escala.
+ * Piedra: Roca ambiental con variación de tamaño y color.
  */
 public class Piedra implements Renderable {
     private Vector3 posicion;
@@ -19,51 +19,79 @@ public class Piedra implements Renderable {
     private Color color;
     private double rotY = 0.0;
     private double pulse = 0.0;
+    private long seed;
 
     public Piedra(Vector3 posicion) {
+        this(posicion, System.currentTimeMillis());
+    }
+
+    public Piedra(Vector3 posicion, long seed) {
         this.posicion = posicion;
-        this.voxelSize = 20;
+        this.seed = seed;
         this.voxels = new ArrayList<>();
-        this.color = new Color(128, 128, 128); // gray
+        
+        Random r = new Random(seed);
+        // Tamaño variable: 8-16 píxeles
+        this.voxelSize = 8 + r.nextInt(9);
+        
+        // Colores realistas de piedra/roca
+        int[] stoneColors = {
+            0x8B8680, // tan
+            0x696969, // dim gray
+            0x808080, // gray
+            0x7F7F7F, // web gray
+            0x928E85, // warm gray
+            0x9C9C9C, // light gray
+            0x6B6B47, // olive gray
+        };
+        int colorIdx = r.nextInt(stoneColors.length);
+        int rgb = stoneColors[colorIdx];
+        int rc = (rgb >> 16) & 0xFF;
+        int gc = (rgb >> 8) & 0xFF;
+        int bc = rgb & 0xFF;
+        // Añadir variación
+        rc = Math.max(0, Math.min(255, rc + r.nextInt(40) - 20));
+        gc = Math.max(0, Math.min(255, gc + r.nextInt(40) - 20));
+        bc = Math.max(0, Math.min(255, bc + r.nextInt(40) - 20));
+        this.color = new Color(rc, gc, bc);
+        
         generateRock();
     }
 
     private void generateRock() {
-        // Minimal rock shape: just core voxels, no extras
+        // Forma irregular de piedra: 5-8 voxels
+        Random r = new Random(seed);
         voxels.add(new Vector3(0, 0, 0));
-        voxels.add(new Vector3(1, 0, 0));
-        voxels.add(new Vector3(-1, 0, 0));
-        voxels.add(new Vector3(0, 0, 1));
-        voxels.add(new Vector3(0, 1, 0));
-        voxels.add(new Vector3(0, 0, -1));
+        
+        int numExtraVoxels = 3 + r.nextInt(4);
+        for (int i = 0; i < numExtraVoxels; i++) {
+            int dx = r.nextInt(3) - 1;
+            int dy = r.nextInt(2);
+            int dz = r.nextInt(3) - 1;
+            if (dx != 0 || dy != 0 || dz != 0) {
+                voxels.add(new Vector3(dx, dy, dz));
+            }
+        }
     }
 
     @Override
     public void update() {
-        rotY += 0.002;
+        rotY += 0.0008;
         if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
-        pulse += 0.015;
+        pulse += 0.008;
         if (pulse > 2 * Math.PI) pulse -= 2 * Math.PI;
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        double scale = 1.0 + Math.sin(pulse) * 0.1; // subtle pulse
         for (Vector3 voxel : voxels) {
             Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize * scale,
+                posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize * scale
+                posicion.z + voxel.z * voxelSize
             );
-            int scaledSize = (int)(voxelSize * scale);
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, rotY);
-            // Vary rock colors slightly for rocky texture
-            Color rockyColor = new Color(
-                Math.max(0, Math.min(255, color.getRed() + (int)(Math.sin(voxel.x) * 30))),
-                Math.max(0, Math.min(255, color.getGreen() + (int)(Math.sin(voxel.z) * 30))),
-                Math.max(0, Math.min(255, color.getBlue() + (int)(Math.sin(voxel.y) * 30)))
-            );
-            renderer.drawCubeShaded(vertices, cam, rockyColor);
+            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, rotY);
+            renderer.drawCubeShaded(vertices, cam, color);
         }
     }
 }

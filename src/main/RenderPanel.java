@@ -47,19 +47,15 @@ public class RenderPanel extends JPanel {
     public void render(List<Renderable> entidades, Camera cam, Controles controles){
         renderer.clear(Color.BLACK);
         for(Renderable e : entidades){
-            // If paused, skip updates to freeze rotations and simulation.
             if (controles == null || !controles.isPaused()) {
                 e.update();
             }
             e.render(renderer, cam);
         }
 
-        // Fix small 1-pixel holes left by rasterization due to edge tie-breaks/rounding.
-        // This is a fast single-pass conservative fill that fixes persistent seams.
-        renderer.fillTinyHoles();
-        // Additionally fill one-pixel horizontal seams that can appear as thin lines
-        // (conservative: only when left/right neighbors agree in color and depth).
-        renderer.fillHorizontalSeams();
+        // Skip expensive hole-filling for performance (trade visual perfection for speed)
+        // renderer.fillTinyHoles();
+        // renderer.fillHorizontalSeams();
 
         // Draw crosshair axis lines if requested (always centered on screen)
         if(controles != null && controles.isCrosshairVisible()){
