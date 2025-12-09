@@ -86,10 +86,7 @@ public class AnimalType02 implements Renderable {
 
     @Override
     public void update() {
-        rotY += speed * 0.004;
-        if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
-        bob += speed * 0.015;
-        if (bob > 2 * Math.PI) bob -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
@@ -97,7 +94,7 @@ public class AnimalType02 implements Renderable {
         for (Vector3 voxel : voxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize + Math.sin(bob) * 2.5,
+                posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);

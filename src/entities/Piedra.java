@@ -76,10 +76,7 @@ public class Piedra implements Renderable {
 
     @Override
     public void update() {
-        rotY += 0.0008;
-        if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
-        pulse += 0.008;
-        if (pulse > 2 * Math.PI) pulse -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
@@ -90,7 +87,7 @@ public class Piedra implements Renderable {
                 posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, rotY);
+            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
             renderer.drawCubeShaded(vertices, cam, color);
         }
     }

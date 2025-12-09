@@ -183,22 +183,19 @@ public class Animal implements Renderable {
 
     @Override
     public void update(){
-        rotY += 0.01 * speed;
-        if(rotY > 2*Math.PI) rotY -= 2*Math.PI;
-        bob += 0.05 * speed;
+        // Animación deshabilitada
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam){
-        // Render each voxel as a cube; apply bobbing vertical offset
-        double bobOffset = Math.sin(bob) * (voxelSize * 0.05);
+        // Render each voxel as a cube sin bobbing ni rotación
         for(Vector3 off : voxels){
             Vector3 world = new Vector3(
                 posicion.x + off.x * voxelSize,
-                posicion.y + off.y * voxelSize + bobOffset,
+                posicion.y + off.y * voxelSize,
                 posicion.z + off.z * voxelSize
             );
-            Vector3[] verts = renderer.getCubeVertices(world, voxelSize, rotY);
+            Vector3[] verts = renderer.getCubeVertices(world, voxelSize, 0); // rotY = 0
             renderer.drawCube(verts, cam, color);
         }
     }

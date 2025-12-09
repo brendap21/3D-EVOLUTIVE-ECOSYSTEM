@@ -58,25 +58,24 @@ public class Flor implements Renderable {
 
     @Override
     public void update() {
-        rotY += 0.012;
-        if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        // Centro
+        // Centro sin rotación
         Vector3 centerPos = new Vector3(posicion.x, posicion.y + centro.y * voxelSize, posicion.z);
-        Vector3[] centerVerts = renderer.getCubeVertices(centerPos, voxelSize + 1, rotY);
+        Vector3[] centerVerts = renderer.getCubeVertices(centerPos, voxelSize + 1, 0);
         renderer.drawCubeShaded(centerVerts, cam, colorCentro);
 
-        // Pétalos
+        // Pétalos sin rotación
         for (Vector3 petalo : petalos) {
             Vector3 worldPos = new Vector3(
                 posicion.x + petalo.x * voxelSize,
                 posicion.y + petalo.y * voxelSize,
                 posicion.z + petalo.z * voxelSize
             );
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, rotY);
+            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
             renderer.drawCubeShaded(vertices, cam, colorPetalo);
         }
     }

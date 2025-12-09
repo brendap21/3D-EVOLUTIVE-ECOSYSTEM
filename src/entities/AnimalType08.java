@@ -89,19 +89,16 @@ public class AnimalType08 implements Renderable {
 
     @Override
     public void update() {
-        rotY += speed * 0.005;
-        if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
-        bob += speed * 0.018;
-        if (bob > 2 * Math.PI) bob -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
         for (Vector3 voxel : voxels) {
             Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize + Math.sin(bob + voxel.x) * 1.5,
+                posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize + Math.cos(bob + voxel.z) * 1.5
+                posicion.z + voxel.z * voxelSize
             );
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
             renderer.drawCubeShaded(vertices, cam, color);

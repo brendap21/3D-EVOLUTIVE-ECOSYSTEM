@@ -88,19 +88,15 @@ public class AnimalType04 implements Renderable {
 
     @Override
     public void update() {
-        rotY += speed * 0.004;
-        if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
-        bob += speed * 0.02;
-        if (bob > 2 * Math.PI) bob -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
         for (int i = 0; i < voxels.size(); i++) {
             Vector3 voxel = voxels.get(i);
-            double waveOffset = Math.sin(bob + i * 0.5) * 2;
             Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize + waveOffset,
+                posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );

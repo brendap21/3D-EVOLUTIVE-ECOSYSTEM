@@ -87,10 +87,7 @@ public class AnimalType01 implements Renderable {
 
     @Override
     public void update() {
-        rotY += speed * 0.005;
-        if (rotY > 2 * Math.PI) rotY -= 2 * Math.PI;
-        bob += speed * 0.02;
-        if (bob > 2 * Math.PI) bob -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
@@ -98,7 +95,7 @@ public class AnimalType01 implements Renderable {
         for (Vector3 voxel : voxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize + Math.sin(bob) * 3,
+                posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );
             Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
@@ -106,7 +103,7 @@ public class AnimalType01 implements Renderable {
         }
         
         // Draw eyes (small white cubes)
-        Vector3 headPos = new Vector3(posicion.x, posicion.y + 3 * voxelSize + Math.sin(bob) * 3, posicion.z);
+        Vector3 headPos = new Vector3(posicion.x, posicion.y + 3 * voxelSize, posicion.z);
         Vector3 eyeLeft = new Vector3(headPos.x - voxelSize * 0.3, headPos.y + voxelSize * 0.2, headPos.z - voxelSize * 0.3);
         Vector3 eyeRight = new Vector3(headPos.x + voxelSize * 0.3, headPos.y + voxelSize * 0.2, headPos.z - voxelSize * 0.3);
         

@@ -40,17 +40,14 @@ public class Arbusto implements Renderable {
 
     @Override
     public void update() {
-        sway += 0.02;
-        if (sway > 2 * Math.PI) sway -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        double swayOffset = Math.sin(sway) * 0.8; // muy sutil
-        
         for (Vector3 voxel : foliageVoxels) {
             Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize + swayOffset,
+                posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );

@@ -83,13 +83,12 @@ public class Arbol implements Renderable {
 
     @Override
     public void update() {
-        sway += 0.006;
-        if (sway > 2 * Math.PI) sway -= 2 * Math.PI;
+        // Animación deshabilitada
     }
 
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
-        // Tronco
+        // Tronco sin movimiento
         for (Vector3 voxel : trunkVoxels) {
             Vector3 worldPos = new Vector3(
                 posicion.x + voxel.x * voxelSize,
@@ -100,11 +99,10 @@ public class Arbol implements Renderable {
             renderer.drawCubeShaded(vertices, cam, trunkColor);
         }
 
-        // Copa con movimiento
-        double swayOffset = Math.sin(sway) * 2.5;
+        // Copa sin movimiento
         for (Vector3 voxel : canopyVoxels) {
             Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize + swayOffset,
+                posicion.x + voxel.x * voxelSize,
                 posicion.y + voxel.y * voxelSize,
                 posicion.z + voxel.z * voxelSize
             );
