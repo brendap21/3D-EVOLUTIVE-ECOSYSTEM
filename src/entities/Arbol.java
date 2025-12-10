@@ -22,6 +22,14 @@ public class Arbol implements Renderable, Collidable {
     private Color canopyColor;
     private double sway = 0.0;
     private long seed;
+    
+    // Growth system
+    private long creationTime; // When the tree was created
+    private int maxTrunkRadius;
+    private int maxTrunkHeight;
+    private int maxCanopyRadius;
+    private static final long GROWTH_DURATION = 180000L; // 3 minutes to full growth in milliseconds
+    private double growthProgress = 0.0; // 0.0 to 1.0
 
     public Arbol(Vector3 posicion, int trunkRadius, int trunkHeight, int canopyRadius) {
         this(posicion, trunkRadius, trunkHeight, canopyRadius, System.currentTimeMillis());
@@ -33,6 +41,10 @@ public class Arbol implements Renderable, Collidable {
         this.voxelSize = 6; // más pequeño para más detalle
         this.trunkVoxels = new ArrayList<>();
         this.canopyVoxels = new ArrayList<>();
+        this.creationTime = System.currentTimeMillis();
+        this.maxTrunkRadius = trunkRadius;
+        this.maxTrunkHeight = trunkHeight;
+        this.maxCanopyRadius = canopyRadius;
         
         Random r = new Random(seed);
         // Colores realistas
@@ -46,7 +58,8 @@ public class Arbol implements Renderable, Collidable {
         int canopyBlue = 30 + r.nextInt(30);
         this.canopyColor = new Color(canopyRed, canopyGreen, canopyBlue);
         
-        generateStructure(trunkRadius, trunkHeight, canopyRadius);
+        // Generar con tamaño inicial de 50% (mitad del tamaño)
+        generateStructure((int)(trunkRadius * 0.5), (int)(trunkHeight * 0.5), (int)(canopyRadius * 0.5));
     }
 
     private void generateStructure(int trunkRadius, int trunkHeight, int canopyRadius) {
@@ -83,7 +96,29 @@ public class Arbol implements Renderable, Collidable {
 
     @Override
     public void update() {
-        // Animación deshabilitada
+        // Actualizar progreso de crecimiento (de 50% a 100%)
+        long currentTime = System.currentTimeMillis();
+        long elapsedTime = currentTime - creationTime;
+        double rawProgress = Math.min(1.0, (double) elapsedTime / GROWTH_DURATION);
+        
+        // El progreso va de 0.5 (50%) a 1.0 (100%)
+        growthProgress = 0.5 + (rawProgress * 0.5);
+        
+        // Regenerar la estructura si el árbol aún está creciendo
+        if (growthProgress < 1.0) {
+            int currentTrunkRadius = (int)(maxTrunkRadius * growthProgress);
+            int currentTrunkHeight = (int)(maxTrunkHeight * growthProgress);
+            int currentCanopyRadius = (int)(maxCanopyRadius * growthProgress);
+            
+            // Asegurar que los valores sean al menos 1
+            currentTrunkRadius = Math.max(1, currentTrunkRadius);
+            currentTrunkHeight = Math.max(1, currentTrunkHeight);
+            currentCanopyRadius = Math.max(1, currentCanopyRadius);
+            
+            trunkVoxels.clear();
+            canopyVoxels.clear();
+            generateStructure(currentTrunkRadius, currentTrunkHeight, currentCanopyRadius);
+        }
     }
 
     @Override
