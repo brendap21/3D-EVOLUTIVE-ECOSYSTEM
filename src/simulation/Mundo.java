@@ -15,6 +15,11 @@ public class Mundo {
     private Animal selectedAnimal = null;
     private boolean waitingForSpawnPosition = false;
     private int selectedAnimalType = -1; // tipo de animal a generar (-1=random, 0-9=tipo específico)
+    
+    // Environmental growth system
+    private long lastGrowthUpdate = 0;
+    private static final long GROWTH_UPDATE_INTERVAL = 1000L; // Update every 10 seconds
+    private static final long NEW_ENTITY_SPAWN_INTERVAL = 5000L; // Spawn new entities every 5 seconds
 
     public Mundo(){ }
 
@@ -63,4 +68,14 @@ public class Mundo {
     // Animal type for spawning
     public synchronized void setSelectedAnimalType(int type){ this.selectedAnimalType = type; }
     public synchronized int getSelectedAnimalType(){ return selectedAnimalType; }
+    
+    // Update environmental entities (trees growing, new plants spawning)
+    public synchronized void updateEnvironment() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Update all entities
+        for (Renderable r : entidades) {
+            r.update();
+        }
+    }
 }

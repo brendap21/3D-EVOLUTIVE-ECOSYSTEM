@@ -18,8 +18,10 @@ public class Pasto implements Renderable, Collidable {
     private List<Vector3> voxels;
     private int voxelSize;
     private Color[] colors;
-    private double wave = 0.0;
     private long seed;
+    private long creationTime; // Tiempo de creación para el crecimiento
+    private double growthScale = 0.1; // Escala de crecimiento (0.1 a 1.0)
+    private double wave = 0.0;
 
     public Pasto(Vector3 posicion) {
         this(posicion, System.currentTimeMillis());
@@ -28,6 +30,7 @@ public class Pasto implements Renderable, Collidable {
     public Pasto(Vector3 posicion, long seed) {
         this.posicion = posicion;
         this.seed = seed;
+        this.creationTime = System.currentTimeMillis();
         this.voxelSize = 2; // muy delgado
         this.voxels = new ArrayList<>();
         
@@ -62,6 +65,12 @@ public class Pasto implements Renderable, Collidable {
     public void update() {
         wave += 0.04;
         if (wave > 2 * Math.PI) wave -= 2 * Math.PI;
+        
+        // Actualizar crecimiento: después de 20 segundos alcanza tamaño completo (pasto más rápido)
+        long elapsedTime = System.currentTimeMillis() - creationTime;
+        double growthTime = 20.0; // 20 segundos para crecer completamente
+        double elapsedSeconds = elapsedTime / 1000.0;
+        growthScale = Math.min(1.0, 0.1 + (elapsedSeconds / growthTime) * 0.9);
     }
 
     @Override
@@ -69,13 +78,18 @@ public class Pasto implements Renderable, Collidable {
         Random r = new Random(seed);
         for (int i = 0; i < voxels.size(); i++) {
             Vector3 voxel = voxels.get(i);
-            double waveOffset = Math.sin(wave + i * 0.6) * 1.2;
-            Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize + waveOffset,
-                posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize
+            Vector3 scaledVoxel = new Vector3(
+                voxel.x * growthScale,
+                voxel.y * growthScale,
+                voxel.z * growthScale
             );
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, voxelSize, 0);
+            double waveOffset = Math.sin(wave + i * 0.6) * 1.2 * growthScale;
+            Vector3 worldPos = new Vector3(
+                posicion.x + scaledVoxel.x * voxelSize + waveOffset,
+                posicion.y + scaledVoxel.y * voxelSize,
+                posicion.z + scaledVoxel.z * voxelSize
+            );
+            Vector3[] vertices = renderer.getCubeVertices(worldPos, (int)(voxelSize * growthScale), 0);
             Color grassColor = colors[i % colors.length];
             renderer.drawCubeShaded(vertices, cam, grassColor);
         }

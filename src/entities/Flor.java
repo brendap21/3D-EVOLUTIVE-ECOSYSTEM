@@ -21,6 +21,12 @@ public class Flor implements Renderable, Collidable {
     private Color colorCentro;
     private double rotY = 0.0;
     private long seed;
+    
+    // Growth system
+    private long creationTime;
+    private int maxVoxelSize;
+    private static final long GROWTH_DURATION = 120000L; // 2 minutes to full growth
+    private double growthProgress = 0.0;
 
     public Flor(Vector3 posicion, Color colorPetalo) {
         this(posicion, colorPetalo, System.currentTimeMillis());
@@ -33,10 +39,13 @@ public class Flor implements Renderable, Collidable {
         this.colorCentro = new Color(255, 220, 80); // amarillo cálido
         this.centro = new Vector3(0, 1, 0);
         this.petalos = new ArrayList<>();
+        this.creationTime = System.currentTimeMillis();
         
         Random r = new Random(seed);
         // Tamaño variable: 1-3 píxeles (flores MÁS PEQUEÑAS - reducido a la mitad)
-        this.voxelSize = 1 + r.nextInt(3);
+        this.maxVoxelSize = 1 + r.nextInt(3);
+        // Iniciar muy pequeño
+        this.voxelSize = 1;
         
         generateFlower();
     }
@@ -58,7 +67,13 @@ public class Flor implements Renderable, Collidable {
 
     @Override
     public void update() {
-        // Animación deshabilitada
+        // Actualizar progreso de crecimiento
+        long currentTime = System.currentTimeMillis();
+        long elapsedTime = currentTime - creationTime;
+        growthProgress = Math.min(1.0, (double) elapsedTime / GROWTH_DURATION);
+        
+        // Actualizar tamaño basado en progreso de crecimiento
+        voxelSize = Math.max(1, (int)(maxVoxelSize * growthProgress));
     }
 
     @Override

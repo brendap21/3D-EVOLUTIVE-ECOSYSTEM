@@ -85,7 +85,7 @@ public class EcosistemaApp {
      */
     private static void spawnRandomAnimals(simulation.Mundo mundo) {
         Random r = new Random(System.currentTimeMillis());
-        int numAnimals = 10 + r.nextInt(5); // 10-14 animals
+        int numAnimals = 5 + r.nextInt(3); // 5-7 animals (mitad de los originales 10-14)
         java.util.List<Vector3> usedPositions = new ArrayList<>();
         double minDistance = 50; // Reduced for more density
 
@@ -163,8 +163,8 @@ public class EcosistemaApp {
         Random r = new Random(System.currentTimeMillis() + 12345);
         java.util.List<Vector3> usedPositions = new ArrayList<>();
 
-        // Spawn trees (4-6) - más árboles
-        int numTrees = 4 + r.nextInt(3);
+        // Spawn trees (7-9) - más árboles
+        int numTrees = 7 + r.nextInt(3);
         spawnWithMinDistance(mundo, r, numTrees, 180, usedPositions, "tree");
 
         // Spawn rocks (5-8)
