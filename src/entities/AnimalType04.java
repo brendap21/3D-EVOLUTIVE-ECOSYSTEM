@@ -46,7 +46,7 @@ public class AnimalType04 extends BaseAnimal {
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
         undulatePhase += 0.2 * getPhaseSpeedMultiplier();
-        Color body = applyGlowToColor(originalColor);
+        Color body = applyGlowToColor(color);
 
         // Segmentos del cuerpo con ondulación (más segmentos en fases avanzadas)
         int segments = 5 + growthPhase * 2;
@@ -107,7 +107,30 @@ public class AnimalType04 extends BaseAnimal {
     }
 
     @Override
+    protected double getPhaseDuration() {
+        return 45.0; // 45 segundos por fase
+    }
+    
+    @Override
+    protected void applyPhaseVisuals() {
+        // Fase 2: Verde más brillante
+        if (growthPhase == 2) {
+            int r = (int)(originalColor.getRed() * 0.9);
+            int g = Math.min(255, (int)(originalColor.getGreen() * 1.3));
+            int b = (int)(originalColor.getBlue() * 1.1);
+            this.color = new Color(r, g, b);
+        }
+        // Fase 3: Verde intenso y vibrante
+        else if (growthPhase == 3) {
+            int r = (int)(originalColor.getRed() * 0.7);
+            int g = Math.min(255, (int)(originalColor.getGreen() * 1.5));
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.2));
+            this.color = new Color(r, g, b);
+        }
+    }
+
+    @Override
     public String getSpeciesName() {
-        return "Serpiente Lima";
+        return "Rana Saltarina";
     }
 }

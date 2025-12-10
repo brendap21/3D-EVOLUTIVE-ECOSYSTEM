@@ -51,8 +51,8 @@ public class AnimalType09 extends BaseAnimal {
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        hopPhase += 0.24 * getPhaseSpeedMultiplier();
-        Color body = applyGlowToColor(originalColor);
+        hopPhase += 0.18 * getPhaseSpeedMultiplier();
+        Color body = applyGlowToColor(color);
 
         // Efecto de salto
         double hop = Math.abs(Math.sin(hopPhase)) * voxelSize * 0.5;
@@ -130,7 +130,30 @@ public class AnimalType09 extends BaseAnimal {
     }
 
     @Override
+    protected double getPhaseDuration() {
+        return 48.0; // 48 segundos por fase
+    }
+    
+    @Override
+    protected void applyPhaseVisuals() {
+        // Fase 2: Azul más brillante
+        if (growthPhase == 2) {
+            int r = Math.min(255, (int)(originalColor.getRed() * 1.1));
+            int g = Math.min(255, (int)(originalColor.getGreen() * 1.15));
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.3));
+            this.color = new Color(r, g, b);
+        }
+        // Fase 3: Azul profundo con toques cálidos
+        else if (growthPhase == 3) {
+            int r = Math.min(255, (int)(originalColor.getRed() * 1.2));
+            int g = Math.min(255, (int)(originalColor.getGreen() * 1.1));
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.4));
+            this.color = new Color(r, g, b);
+        }
+    }
+
+    @Override
     public String getSpeciesName() {
-        return "Conejo Rosa";
+        return "Ave Voladora";
     }
 }

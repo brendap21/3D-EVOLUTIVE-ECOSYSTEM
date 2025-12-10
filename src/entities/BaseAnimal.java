@@ -25,8 +25,13 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     // Growth phases
     protected int growthPhase = 1; // 1, 2, 3
     protected double phaseTimer = 0.0;
-    protected static final double PHASE_DURATION = 60.0; // seconds per phase before transition (1 minuto)
     protected double transitionPulse = 0.0; // animation pulse when changing phase
+    
+    // Método abstracto para que cada especie defina su tiempo de evolución
+    protected abstract double getPhaseDuration();
+    
+    // Método abstracto para que cada especie defina sus cambios visuales por fase
+    protected abstract void applyPhaseVisuals();
     
     // Movement / wandering
     protected Vector3 velocity = new Vector3(0, 0, 0);
@@ -90,12 +95,18 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     
     @Override
     public void update() {
+        // Debug simple
+        if (animalId == 1 && !isSpawning && (int)(phaseTimer) % 10 == 0 && phaseTimer > 0.1 && phaseTimer < 0.2) {
+            System.out.println("UPDATE llamado - Animal 1, phaseTimer=" + phaseTimer + ", fase=" + growthPhase);
+        }
+        
         if (isSpawning) {
             spawnProgress += 0.016 / SPAWN_DURATION;
             if (spawnProgress >= 1.0) {
                 spawnProgress = 1.0;
                 isSpawning = false;
                 spawnParticles.clear();
+                System.out.println("Animal " + animalId + " terminó spawn animation");
             }
         }
 
@@ -279,11 +290,21 @@ public abstract class BaseAnimal implements Renderable, Collidable {
 
     protected void updateGrowthPhase() {
         if (isSpawning) return; // don't change during spawn
+        
+        double oldTimer = phaseTimer;
         phaseTimer += 0.016;
-        if (phaseTimer >= PHASE_DURATION && growthPhase < 3) {
+        
+        // Debug: imprimir cada 5 segundos solo para animal 1
+        if (animalId == 1 && ((int)phaseTimer % 5 == 0) && ((int)oldTimer % 5 != 0)) {
+            System.out.println("Animal 1 - Fase: " + growthPhase + " Timer: " + String.format("%.1f", phaseTimer) + "/" + String.format("%.1f", getPhaseDuration()));
+        }
+        
+        if (phaseTimer >= getPhaseDuration() && growthPhase < 3) {
+            System.out.println("¡EVOLUCIÓN! Animal " + animalId + " cambió de fase " + growthPhase + " a " + (growthPhase + 1));
             growthPhase++;
             phaseTimer = 0.0;
             transitionPulse = 1.0; // trigger animation pulse
+            applyPhaseVisuals(); // Aplicar cambios visuales específicos de la especie
         }
         if (transitionPulse > 0) {
             transitionPulse = Math.max(0, transitionPulse - 0.04);

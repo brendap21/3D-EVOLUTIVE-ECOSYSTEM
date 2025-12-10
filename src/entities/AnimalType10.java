@@ -51,8 +51,8 @@ public class AnimalType10 extends BaseAnimal {
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        flapPhase += 0.28 * getPhaseSpeedMultiplier();
-        Color body = applyGlowToColor(originalColor);
+        flapPhase += 0.22 * getPhaseSpeedMultiplier();
+        Color body = applyGlowToColor(color);
 
         // Cuerpo base
         for (Vector3 v : voxels) {
@@ -126,6 +126,29 @@ public class AnimalType10 extends BaseAnimal {
         leg2 = applyScaleToPosition(leg2);
         renderer.drawCubeShaded(renderer.getCubeVertices(leg1, legSize, 0), cam, claw);
         renderer.drawCubeShaded(renderer.getCubeVertices(leg2, legSize, 0), cam, claw);
+    }
+
+    @Override
+    protected double getPhaseDuration() {
+        return 60.0; // 60 segundos por fase (evolución más lenta)
+    }
+    
+    @Override
+    protected void applyPhaseVisuals() {
+        // Fase 2: Tonos más oscuros y profundos
+        if (growthPhase == 2) {
+            int r = (int)(originalColor.getRed() * 0.85);
+            int g = (int)(originalColor.getGreen() * 0.9);
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.2));
+            this.color = new Color(r, g, b);
+        }
+        // Fase 3: Negro azulado nocturno
+        else if (growthPhase == 3) {
+            int r = (int)(originalColor.getRed() * 0.7);
+            int g = (int)(originalColor.getGreen() * 0.75);
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.3));
+            this.color = new Color(r, g, b);
+        }
     }
 
     @Override

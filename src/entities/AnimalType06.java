@@ -50,7 +50,7 @@ public class AnimalType06 extends BaseAnimal {
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
         pulsePhase += 0.22 * getPhaseSpeedMultiplier();
-        Color body = applyGlowToColor(originalColor);
+        Color body = applyGlowToColor(color);
 
         // Efecto de pulso luminoso
         double pulse = Math.sin(pulsePhase * 2) * 0.2 + 0.8;
@@ -129,6 +129,29 @@ public class AnimalType06 extends BaseAnimal {
         legR = applyScaleToPosition(legR);
         renderer.drawCubeShaded(renderer.getCubeVertices(legL, legSize, 0), cam, glowBody.darker());
         renderer.drawCubeShaded(renderer.getCubeVertices(legR, legSize, 0), cam, glowBody.darker());
+    }
+
+    @Override
+    protected double getPhaseDuration() {
+        return 42.0; // 42 segundos por fase
+    }
+    
+    @Override
+    protected void applyPhaseVisuals() {
+        // Fase 2: Cyan más brillante y vibrante
+        if (growthPhase == 2) {
+            int r = (int)(originalColor.getRed() * 0.9);
+            int g = Math.min(255, (int)(originalColor.getGreen() * 1.25));
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.3));
+            this.color = new Color(r, g, b);
+        }
+        // Fase 3: Cyan profundo radiante
+        else if (growthPhase == 3) {
+            int r = (int)(originalColor.getRed() * 0.8);
+            int g = Math.min(255, (int)(originalColor.getGreen() * 1.35));
+            int b = Math.min(255, (int)(originalColor.getBlue() * 1.45));
+            this.color = new Color(r, g, b);
+        }
     }
 
     @Override
