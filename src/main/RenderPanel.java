@@ -404,7 +404,9 @@ public class RenderPanel extends JPanel {
                 }
                 double hitT = t - step + step * alpha;
                 Vector3 hit = origin.add(dir.scale(hitT));
-                result.position = new Vector3(hit.x, h + 1.0, hit.z);
+                // Añadir offset vertical para compensar patas de animales que tienen Y negativa
+                // El offset de 5.0 es suficiente para la mayoría de los animales (voxelSize * 1.5 aprox)
+                result.position = new Vector3(hit.x, h + 5.0, hit.z);
                 result.hasHit = true;
                 break;
             }
@@ -505,18 +507,83 @@ public class RenderPanel extends JPanel {
         int my = e.getY();
         
         // Handle animal info panel clicks first
-        if (selectedAnimal != null && deleteAnimalButton != null) {
-            if (SwingUtilities.isLeftMouseButton(e) && deleteAnimalButton.contains(mx, my)) {
-                // Delete animal
-                if (mundo != null) {
-                    mundo.removeEntity(selectedAnimal);
+        if (selectedAnimal != null && selectedAnimal instanceof entities.BaseAnimal) {
+            entities.BaseAnimal ba = (entities.BaseAnimal) selectedAnimal;
+            
+            if (SwingUtilities.isLeftMouseButton(e)) {
+                // Check for delete button
+                if (deleteAnimalButton != null && deleteAnimalButton.contains(mx, my)) {
+                    if (mundo != null) {
+                        mundo.removeEntity(selectedAnimal);
+                    }
+                    selectedAnimal.setSelected(false);
+                    selectedAnimal = null;
+                    animalPanelActive = false;
+                    controles.setAnimalPanelOpen(false);
+                    setTransientMessage("Animal eliminado", new Color(255, 150, 50), 2000);
+                    return;
                 }
-                selectedAnimal.setSelected(false);
-                selectedAnimal = null;
-                animalPanelActive = false;
-                controles.setAnimalPanelOpen(false);
-                setTransientMessage("Animal eliminado", new Color(255, 150, 50), 2000);
-                return;
+                
+                // Check for evolution buttons
+                int phase = ba.getGrowthPhase();
+                
+                // Button dimensions for evolution buttons
+                int panelWidth = 320;
+                int panelHeight = 420;
+                int panelX = ancho - (int)(panelWidth * animalPanelSlideProgress);
+                int panelY = alto / 2 - panelHeight / 2;
+                
+                int lineY = panelY + 130;
+                lineY += 18; // Velocidad
+                lineY += 18; // Tiempo en mapa
+                
+                // Conditional height based on phase (same logic as drawAnimalInfoPanel)
+                if (phase < 3) {
+                    lineY += 18; // Progreso
+                    lineY += 18; // Time to next
+                    lineY += 20; // Progress bar
+                } else {
+                    lineY += 18; // "Evolucion completa" message
+                }
+                lineY += 10;
+                
+                int buttonHeight = 28;
+                int buttonWidth = 85;
+                int buttonSpacing = 6;
+                
+                int btn1X = panelX + 15;
+                int btn1Y = lineY;
+                int btn2X = btn1X + buttonWidth + buttonSpacing;
+                int btn2Y = lineY;
+                int btn3X = btn2X + buttonWidth + buttonSpacing;
+                int btn3Y = lineY;
+                
+                // Check Anterior button (phase > 1)
+                if (phase > 1 && mx >= btn1X && mx < btn1X + buttonWidth && my >= btn1Y && my < btn1Y + buttonHeight) {
+                    ba.revertToPreviousPhase();
+                    setTransientMessage("Retrocedido a etapa " + ba.getGrowthPhase(), new Color(150, 200, 255), 2000);
+                    return;
+                }
+                
+                // Check Siguiente button (phase < 3)
+                if (phase < 3 && mx >= btn2X && mx < btn2X + buttonWidth && my >= btn2Y && my < btn2Y + buttonHeight) {
+                    ba.advanceToNextPhase();
+                    setTransientMessage("Avanzado a etapa " + ba.getGrowthPhase(), new Color(100, 255, 150), 2000);
+                    return;
+                }
+                
+                // Check Eliminar button
+                if (mx >= btn3X && mx < btn3X + buttonWidth && my >= btn3Y && my < btn3Y + buttonHeight) {
+                    if (mundo != null) {
+                        mundo.removeEntity(selectedAnimal);
+                    }
+                    selectedAnimal.setSelected(false);
+                    selectedAnimal = null;
+                    animalPanelActive = false;
+                    controles.setAnimalPanelOpen(false);
+                    setTransientMessage("Animal eliminado", new Color(255, 150, 50), 2000);
+                    return;
+                }
             }
         }
         
@@ -735,13 +802,15 @@ public class RenderPanel extends JPanel {
     
     private void drawAnimalInfoPanel() {
         if (selectedAnimal == null || !animalPanelActive) return;
+        if (!(selectedAnimal instanceof entities.BaseAnimal)) return;
         
+        entities.BaseAnimal ba = (entities.BaseAnimal) selectedAnimal;
         BufferedImage buffer = renderer.getBuffer();
         if (buffer == null) return;
         
-        // Panel dimensions and position
-        int panelWidth = 300;
-        int panelHeight = 200;
+        // Panel dimensions and position - made taller to accommodate more content
+        int panelWidth = 320;
+        int panelHeight = 420;
         int panelX = ancho - (int)(panelWidth * animalPanelSlideProgress);
         int panelY = alto / 2 - panelHeight / 2;
         
@@ -828,128 +897,172 @@ public class RenderPanel extends JPanel {
         PixelFont.drawText(renderer, panelX + 15, panelY + 10, "ANIMAL", 2, new Color(200, 230, 255));
         
         // Draw animal ID with larger font
-        String animalInfo = "ID: #" + selectedAnimal.getAnimalId();
-        PixelFont.drawText(renderer, panelX + 15, panelY + 50, animalInfo, 3, new Color(255, 255, 150));
+        String animalInfo = "ID: #" + ba.getAnimalId();
+        PixelFont.drawText(renderer, panelX + 15, panelY + 45, animalInfo, 3, new Color(255, 255, 150));
         
         // Draw species name
-        if (selectedAnimal instanceof entities.BaseAnimal) {
-            entities.BaseAnimal ba = (entities.BaseAnimal) selectedAnimal;
-            String species = ba.getSpeciesName();
-            PixelFont.drawText(renderer, panelX + 15, panelY + 75, species, 1, new Color(200, 200, 200));
-            
-            // Draw growth phase
-            String phaseName = "";
-            int phase = ba.getGrowthPhase();
-            switch(phase) {
-                case 1: phaseName = "FASE 1: Cria"; break;
-                case 2: phaseName = "FASE 2: Joven"; break;
-                case 3: phaseName = "FASE 3: Adulto"; break;
-            }
-            PixelFont.drawText(renderer, panelX + 15, panelY + 90, phaseName, 2, new Color(100, 255, 150));
-            
-            // Draw phase progress
+        String species = ba.getSpeciesName();
+        PixelFont.drawText(renderer, panelX + 15, panelY + 75, species, 2, ba.getOriginalColor());
+        
+        // Draw growth phase
+        int phase = ba.getGrowthPhase();
+        String phaseName = "";
+        Color phaseColor = Color.WHITE;
+        switch(phase) {
+            case 1: phaseName = "ETAPA 1: Cria"; phaseColor = new Color(150, 200, 255); break;
+            case 2: phaseName = "ETAPA 2: Joven"; phaseColor = new Color(100, 255, 150); break;
+            case 3: phaseName = "ETAPA 3: Adulto"; phaseColor = new Color(255, 215, 0); break;
+        }
+        PixelFont.drawText(renderer, panelX + 15, panelY + 100, phaseName, 2, phaseColor);
+        
+        // Draw additional stats
+        int lineY = panelY + 130;
+        
+        // Velocidad (Speed)
+        double speed = ba.getBaseSpeed();
+        double speedMultiplier = phase == 1 ? 1.0 : (phase == 2 ? 1.25 : 1.5);
+        double actualSpeed = speed * speedMultiplier;
+        String speedText = String.format("Velocidad: %.2f", actualSpeed);
+        PixelFont.drawText(renderer, panelX + 15, lineY, speedText, 1, new Color(180, 180, 255));
+        lineY += 18;
+        
+        // Tiempo en mapa (Time in map)
+        double timeInMap = ba.getTimeSinceSpawn();
+        String timeText = String.format("T. en mapa: %.1fs", timeInMap);
+        PixelFont.drawText(renderer, panelX + 15, lineY, timeText, 1, new Color(180, 200, 255));
+        lineY += 18;
+        
+        // Tiempo para próxima etapa (Time to next stage)
+        if (phase < 3) {
+            double timeToNext = ba.getTimeToNextPhase();
             double progress = ba.getPhaseTimer();
-            double maxTime = 60.0;
+            double maxTime = ba.getPhaseDurationPublic();
             int progressPercent = (int)((progress / maxTime) * 100);
-            if (phase < 3) {
-                String progressText = "Progreso: " + progressPercent + "%";
-                PixelFont.drawText(renderer, panelX + 15, panelY + 110, progressText, 1, new Color(180, 180, 255));
-                
-                // Progress bar
-                int barWidth = 220;
-                int barHeight = 8;
-                int barX = panelX + 15;
-                int barY = panelY + 125;
-                
-                // Background
-                for (int y = barY; y < barY + barHeight; y++) {
-                    for (int x = barX; x < barX + barWidth; x++) {
-                        if (x >= 0 && x < ancho && y >= 0 && y < alto) {
-                            try {
-                                buffer.setRGB(x, y, new Color(40, 40, 60).getRGB());
-                            } catch (Exception e) {}
-                        }
+            
+            String progressText = String.format("Progreso: %d%%", progressPercent);
+            PixelFont.drawText(renderer, panelX + 15, lineY, progressText, 1, new Color(180, 180, 255));
+            lineY += 18;
+            
+            String timeNextText = String.format("Proxima etapa: %.1fs", timeToNext);
+            PixelFont.drawText(renderer, panelX + 15, lineY, timeNextText, 1, new Color(150, 200, 255));
+            lineY += 18;
+            
+            // Progress bar
+            int barWidth = 280;
+            int barHeight = 10;
+            int barX = panelX + 15;
+            int barY = lineY;
+            
+            // Background
+            for (int y = barY; y < barY + barHeight; y++) {
+                for (int x = barX; x < barX + barWidth; x++) {
+                    if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                        try {
+                            buffer.setRGB(x, y, new Color(40, 40, 60).getRGB());
+                        } catch (Exception e) {}
                     }
                 }
-                
-                // Progress fill
-                int fillWidth = (int)(barWidth * (progress / maxTime));
-                for (int y = barY; y < barY + barHeight; y++) {
-                    for (int x = barX; x < barX + fillWidth; x++) {
-                        if (x >= 0 && x < ancho && y >= 0 && y < alto) {
-                            try {
-                                buffer.setRGB(x, y, new Color(100, 200, 255).getRGB());
-                            } catch (Exception e) {}
-                        }
+            }
+            
+            // Progress fill
+            int fillWidth = (int)(barWidth * (progress / maxTime));
+            for (int y = barY; y < barY + barHeight; y++) {
+                for (int x = barX; x < barX + fillWidth; x++) {
+                    if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                        try {
+                            buffer.setRGB(x, y, new Color(100, 200, 255).getRGB());
+                        } catch (Exception e) {}
                     }
                 }
-            } else {
-                PixelFont.drawText(renderer, panelX + 15, panelY + 110, "Evolucion completa", 1, new Color(255, 215, 0));
             }
+            lineY += 20;
+        } else {
+            PixelFont.drawText(renderer, panelX + 15, lineY, "Evolucion completa", 1, new Color(255, 215, 0));
+            lineY += 18;
         }
         
-        // Draw decorative line
-        Color lineColor = new Color(100, 180, 220);
-        for (int x = panelX + 15; x < panelX + panelWidth - 15; x++) {
-            if (x >= 0 && x < ancho && panelY + 75 >= 0 && panelY + 75 < alto) {
-                try {
-                    buffer.setRGB(x, panelY + 75, lineColor.getRGB());
-                } catch (Exception e) {}
-            }
+        // Draw evolution control buttons
+        lineY += 10;
+        int buttonHeight = 28;
+        int buttonWidth = 85;
+        int buttonSpacing = 6;
+        
+        // Button 1: Etapa Anterior (only if phase > 1)
+        int btn1X = panelX + 15;
+        int btn1Y = lineY;
+        boolean btn1Enabled = phase > 1;
+        drawEvolutionButton(buffer, btn1X, btn1Y, buttonWidth, buttonHeight, "ANTERIOR", btn1Enabled, panelX, panelY, panelWidth);
+        if (btn1Enabled) {
+            // Store button bounds for click detection
         }
         
-        // Draw delete button with hover effect
-        int buttonWidth = 200;
-        int buttonHeight = 35;
-        int buttonX = panelX + (panelWidth - buttonWidth) / 2;
-        int buttonY = panelY + panelHeight - 55;
+        // Button 2: Siguiente Etapa (only if phase < 3)
+        int btn2X = btn1X + buttonWidth + buttonSpacing;
+        int btn2Y = lineY;
+        boolean btn2Enabled = phase < 3;
+        drawEvolutionButton(buffer, btn2X, btn2Y, buttonWidth, buttonHeight, "SIGUIENTE", btn2Enabled, panelX, panelY, panelWidth);
         
-        deleteAnimalButton = new ButtonBounds(buttonX, buttonY, buttonWidth, buttonHeight, "delete_animal");
+        // Button 3: Eliminar (always enabled)
+        int btn3X = btn2X + buttonWidth + buttonSpacing;
+        int btn3Y = lineY;
+        drawEvolutionButton(buffer, btn3X, btn3Y, buttonWidth, buttonHeight, "ELIMINAR", true, panelX, panelY, panelWidth);
+        
+        // Store button bounds for click detection
+        deleteAnimalButton = new ButtonBounds(btn3X, btn3Y, buttonWidth, buttonHeight, "delete_animal");
+        
+        // Draw hint
+        PixelFont.drawText(renderer, panelX + 15, panelY + panelHeight - 15, "ESC para cerrar", 1, new Color(150, 150, 150));
+    }
+    
+    private void drawEvolutionButton(BufferedImage buffer, int x, int y, int w, int h, String text, boolean enabled, int panelX, int panelY, int panelW) {
+        Color btnBg1, btnBg2, btnBorder, txtColor;
+        
+        if (enabled) {
+            btnBg1 = new Color(80, 120, 200);
+            btnBg2 = new Color(100, 150, 220);
+            btnBorder = new Color(150, 180, 255);
+            txtColor = Color.WHITE;
+        } else {
+            btnBg1 = new Color(60, 60, 80);
+            btnBg2 = new Color(80, 80, 100);
+            btnBorder = new Color(100, 100, 120);
+            txtColor = new Color(150, 150, 150);
+        }
         
         // Button background with gradient
-        Color btnBg1 = new Color(180, 40, 40);
-        Color btnBg2 = new Color(220, 60, 60);
-        for (int y = buttonY; y < buttonY + buttonHeight; y++) {
-            for (int x = buttonX; x < buttonX + buttonWidth; x++) {
-                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+        for (int yy = y; yy < y + h; yy++) {
+            for (int xx = x; xx < x + w; xx++) {
+                if (xx >= 0 && xx < ancho && yy >= 0 && yy < alto) {
                     try {
-                        float grad = (float)(y - buttonY) / buttonHeight;
+                        float grad = (float)(yy - y) / h;
                         int r = (int)(btnBg1.getRed() * (1 - grad) + btnBg2.getRed() * grad);
                         int g = (int)(btnBg1.getGreen() * (1 - grad) + btnBg2.getGreen() * grad);
                         int b = (int)(btnBg1.getBlue() * (1 - grad) + btnBg2.getBlue() * grad);
-                        buffer.setRGB(x, y, new Color(r, g, b).getRGB());
+                        buffer.setRGB(xx, yy, new Color(r, g, b).getRGB());
                     } catch (Exception e) {}
                 }
             }
         }
         
-        // Button border with glow
-        Color buttonBorder = new Color(255, 100, 100);
-        for (int x = buttonX; x < buttonX + buttonWidth; x++) {
-            if (x >= 0 && x < ancho) {
+        // Button border
+        for (int xx = x; xx < x + w; xx++) {
+            if (xx >= 0 && xx < ancho) {
                 try {
-                    for (int i = 0; i < 2; i++) {
-                        if (buttonY - i >= 0) buffer.setRGB(x, buttonY - i, buttonBorder.getRGB());
-                        if (buttonY + buttonHeight + i < alto) buffer.setRGB(x, buttonY + buttonHeight + i, buttonBorder.getRGB());
-                    }
+                    if (y >= 0) buffer.setRGB(xx, y, btnBorder.getRGB());
+                    if (y + h - 1 >= 0 && y + h - 1 < alto) buffer.setRGB(xx, y + h - 1, btnBorder.getRGB());
                 } catch (Exception e) {}
             }
         }
-        for (int y = buttonY; y < buttonY + buttonHeight; y++) {
-            if (y >= 0 && y < alto) {
+        for (int yy = y; yy < y + h; yy++) {
+            if (yy >= 0 && yy < alto) {
                 try {
-                    for (int i = 0; i < 2; i++) {
-                        if (buttonX - i >= 0) buffer.setRGB(buttonX - i, y, buttonBorder.getRGB());
-                        if (buttonX + buttonWidth + i < ancho) buffer.setRGB(buttonX + buttonWidth + i, y, buttonBorder.getRGB());
-                    }
+                    if (x >= 0) buffer.setRGB(x, yy, btnBorder.getRGB());
+                    if (x + w - 1 >= 0 && x + w - 1 < ancho) buffer.setRGB(x + w - 1, yy, btnBorder.getRGB());
                 } catch (Exception e) {}
             }
         }
         
-        // Button text
-        PixelFont.drawText(renderer, buttonX + 35, buttonY + 10, "ELIMINAR", 2, Color.WHITE);
-        
-        // Draw ESC hint
-        PixelFont.drawText(renderer, panelX + 15, panelY + panelHeight - 20, "ESC para cerrar", 1, new Color(150, 150, 150));
+        // Button text (small font)
+        PixelFont.drawText(renderer, x + 5, y + 7, text, 1, txtColor);
     }
 }

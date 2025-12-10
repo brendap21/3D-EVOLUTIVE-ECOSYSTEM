@@ -102,7 +102,9 @@ public class EcosistemaApp {
             // Get terrain height at this position and place animal on ground
             double terrainHeight = mundo.getHeightAt(x, z);
             if (terrainHeight == Double.NEGATIVE_INFINITY) terrainHeight = 0.0;
-            double y = terrainHeight + 1.0; // 1 unit above terrain to avoid clipping
+            // Añadir offset vertical para compensar patas de animales que tienen Y negativa
+            // El offset de 5.0 es suficiente para la mayoría de los animales (voxelSize * 1.5 aprox)
+            double y = terrainHeight + 5.0;
             
             Vector3 pos = new Vector3(x, y, z);
 

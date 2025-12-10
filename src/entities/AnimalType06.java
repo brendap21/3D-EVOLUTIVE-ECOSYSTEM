@@ -15,11 +15,13 @@ import java.util.List;
  */
 public class AnimalType06 extends BaseAnimal {
     private double pulsePhase = 0.0;
+    private AnimationController animController;
 
     public AnimalType06(Vector3 posicion, long seed) {
         this.posicion = posicion;
         this.seed = seed;
         this.voxels = new ArrayList<>();
+        this.animController = new AnimationController();
         generateFromSeed(seed);
         initializeSpawnAnimation();
     }
@@ -37,23 +39,41 @@ public class AnimalType06 extends BaseAnimal {
         this.originalColor = color;
         this.baseSpeed = 1.7 + r.nextDouble() * 0.6;
 
-        // Cuerpo central
+        // Cuerpo central (sin patas, se dibujan animadas)
         voxels.add(new Vector3(0, 0, 0));
         voxels.add(new Vector3(0, 1, 0));
         voxels.add(new Vector3(0, 2, 0));
-
-        // Patas bípedas
-        voxels.add(new Vector3(0, -1, 0));
-        voxels.add(new Vector3(0, -1, 1));
     }
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        pulsePhase += 0.22 * getPhaseSpeedMultiplier();
+        animController.update(0.016);
+        animController.setBlinkFrequency(3.2);
+        animController.setJawFrequency(2.8);
+        animController.setBodySwayFrequency(1.8);
+        pulsePhase += 0.24 * getPhaseSpeedMultiplier();
+        boolean evolved = growthPhase >= 2;
+        boolean apex = growthPhase == 3;
         Color body = applyGlowToColor(color);
 
+        // Transición de fase: halo y flash central
+        double tp = transitionPulse;
+        if (tp > 0) {
+            if (growthPhase == 2) {
+                int ring = applyScaleToSize((int)(voxelSize * (1.0 + tp)));
+                Vector3 halo = applyTransform(new Vector3(0, voxelSize * (2.6 + tp), 0));
+                halo = applyScaleToPosition(halo);
+                renderer.drawCubeShaded(renderer.getCubeVertices(halo, ring, 0), cam, body.brighter());
+            } else if (growthPhase == 3) {
+                int core = applyScaleToSize((int)(voxelSize * (1.2 + tp)));
+                Vector3 corePos = applyTransform(new Vector3(0, voxelSize * 1.0, 0));
+                corePos = applyScaleToPosition(corePos);
+                renderer.drawCubeShaded(renderer.getCubeVertices(corePos, core, 0), cam, body.brighter().brighter());
+            }
+        }
+
         // Efecto de pulso luminoso
-        double pulse = Math.sin(pulsePhase * 2) * 0.2 + 0.8;
+        double pulse = Math.sin(pulsePhase * 2) * (apex ? 0.5 : (evolved ? 0.35 : 0.2)) + 0.8;
         Color glowBody = new Color(
             (int)(body.getRed() * pulse),
             (int)(body.getGreen() * pulse),
@@ -69,10 +89,10 @@ public class AnimalType06 extends BaseAnimal {
         }
 
         // Antenas (más largas en fases avanzadas)
-        int antennaLen = 2 + growthPhase;
-        int antennaSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.4)));
+        int antennaLen = apex ? 7 : (evolved ? 4 + growthPhase : 2 + growthPhase);
+        int antennaSize = Math.max(1, applyScaleToSize((int)(voxelSize * (apex ? 0.65 : (evolved ? 0.55 : 0.4)))));
         for (int i = 0; i < antennaLen; i++) {
-            double wobble = Math.sin(pulsePhase + i * 0.5) * voxelSize * 0.3;
+            double wobble = Math.sin(pulsePhase + i * 0.5) * voxelSize * (apex ? 0.5 : 0.3);
             Vector3 antL = applyTransform(new Vector3(-voxelSize * 0.5 + wobble, voxelSize * (3.0 + i * 0.7), 0));
             antL = applyScaleToPosition(antL);
             Vector3 antR = applyTransform(new Vector3(voxelSize * 0.5 - wobble, voxelSize * (3.0 + i * 0.7), 0));
@@ -82,7 +102,7 @@ public class AnimalType06 extends BaseAnimal {
         }
 
         // Ojos grandes
-        int eyeSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.4)));
+        int eyeSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.45)));
         Color eyeW = new Color(200, 255, 255);
         Color pupil = new Color(20, 80, 100);
         Vector3 eyeL = applyTransform(new Vector3(-voxelSize * 0.5, voxelSize * 2.2, voxelSize * 0.5));
@@ -91,7 +111,7 @@ public class AnimalType06 extends BaseAnimal {
         eyeR = applyScaleToPosition(eyeR);
         renderer.drawCubeShaded(renderer.getCubeVertices(eyeL, eyeSize, 0), cam, eyeW);
         renderer.drawCubeShaded(renderer.getCubeVertices(eyeR, eyeSize, 0), cam, eyeW);
-        int pup = Math.max(1, eyeSize / 2);
+        int pup = Math.max(1, (int)(eyeSize * 0.55 * (1.0 - animController.getBlinkAmount())));
         Vector3 pupilL = applyTransform(new Vector3(-voxelSize * 0.5, voxelSize * 2.2, voxelSize * 0.5 + pup));
         pupilL = applyScaleToPosition(pupilL);
         Vector3 pupilR = applyTransform(new Vector3(voxelSize * 0.5, voxelSize * 2.2, voxelSize * 0.5 + pup));
@@ -100,35 +120,83 @@ public class AnimalType06 extends BaseAnimal {
         renderer.drawCubeShaded(renderer.getCubeVertices(pupilR, pup, 0), cam, pupil);
 
         // Boca pequeña
-        int mouthSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.25)));
-        Vector3 mouth = applyTransform(new Vector3(0, voxelSize * 1.7, voxelSize * 0.8));
+        double jaw = animController.getJawOpen() * 1.6;
+        int mouthSize = Math.max(1, applyScaleToSize((int)(voxelSize * (0.25 + jaw * 0.2))));
+        Vector3 mouth = applyTransform(new Vector3(0, voxelSize * 1.7 + jaw * 0.25, voxelSize * 0.8 + jaw));
         mouth = applyScaleToPosition(mouth);
         renderer.drawCubeShaded(renderer.getCubeVertices(mouth, mouthSize, 0), cam, new Color(50, 120, 140));
 
-        // Brazos articulados (ondean)
-        int armSegments = 2 + growthPhase / 2;
-        int armSize = applyScaleToSize((int)(voxelSize * 0.6));
+        // Brazos articulados (ondean) más largos en fase 2
+        int armSegments = apex ? 5 : (evolved ? 3 : 2) + growthPhase / 2;
+        int armUpper = applyScaleToSize((int)(voxelSize * (apex ? 1.0 : (evolved ? 0.85 : 0.7))));
+        int armLower = applyScaleToSize((int)(voxelSize * (apex ? 0.9 : (evolved ? 0.75 : 0.6))));
         for (int i = 0; i < armSegments; i++) {
-            double armWave = Math.sin(pulsePhase + i * 0.7) * voxelSize * 0.5;
-            Vector3 armL = applyTransform(new Vector3(-voxelSize * (1.2 + i * 0.5), voxelSize * (1.5 - i * 0.3) + armWave, 0));
-            armL = applyScaleToPosition(armL);
-            Vector3 armR = applyTransform(new Vector3(voxelSize * (1.2 + i * 0.5), voxelSize * (1.5 - i * 0.3) - armWave, 0));
-            armR = applyScaleToPosition(armR);
-            renderer.drawCubeShaded(renderer.getCubeVertices(armL, armSize, 0), cam, glowBody.darker());
-            renderer.drawCubeShaded(renderer.getCubeVertices(armR, armSize, 0), cam, glowBody.darker());
+            double armWave = Math.sin(pulsePhase + i * 0.7) * voxelSize * (apex ? 1.2 : (evolved ? 0.9 : 0.6));
+            Vector3 armLUp = applyTransform(new Vector3(-voxelSize * (1.1 + i * 0.45), voxelSize * (1.6 - i * 0.25) + armWave, 0));
+            armLUp = applyScaleToPosition(armLUp);
+            Vector3 armLLo = applyTransform(new Vector3(-voxelSize * (1.3 + i * 0.5), voxelSize * (1.1 - i * 0.25) + armWave * 0.8, voxelSize * 0.1));
+            armLLo = applyScaleToPosition(armLLo);
+            Vector3 armRUp = applyTransform(new Vector3(voxelSize * (1.1 + i * 0.45), voxelSize * (1.6 - i * 0.25) - armWave, 0));
+            armRUp = applyScaleToPosition(armRUp);
+            Vector3 armRLo = applyTransform(new Vector3(voxelSize * (1.3 + i * 0.5), voxelSize * (1.1 - i * 0.25) - armWave * 0.8, voxelSize * 0.1));
+            armRLo = applyScaleToPosition(armRLo);
+            renderer.drawCubeShaded(renderer.getCubeVertices(armLUp, armUpper, 0), cam, glowBody.darker());
+            renderer.drawCubeShaded(renderer.getCubeVertices(armLLo, armLower, 0), cam, glowBody.darker());
+            renderer.drawCubeShaded(renderer.getCubeVertices(armRUp, armUpper, 0), cam, glowBody.darker());
+            renderer.drawCubeShaded(renderer.getCubeVertices(armRLo, armLower, 0), cam, glowBody.darker());
         }
 
-        // Patas bípedas con movimiento
-        double leftLegPhase = Math.sin(pulsePhase) * voxelSize * 0.4;
-        double rightLegPhase = Math.sin(pulsePhase + Math.PI) * voxelSize * 0.4;
-        int legSize = applyScaleToSize((int)(voxelSize * 0.7));
+        // Orbes de energía en manos fase 3
+        if (apex) {
+            int orb = applyScaleToSize((int)(voxelSize * 0.7));
+            Vector3 orbL = applyTransform(new Vector3(-voxelSize * (1.3 + armSegments * 0.35), voxelSize * 0.6 + Math.sin(pulsePhase) * voxelSize * 0.3, voxelSize * 0.2));
+            Vector3 orbR = applyTransform(new Vector3(voxelSize * (1.3 + armSegments * 0.35), voxelSize * 0.6 - Math.sin(pulsePhase) * voxelSize * 0.3, voxelSize * 0.2));
+            orbL = applyScaleToPosition(orbL); orbR = applyScaleToPosition(orbR);
+            renderer.drawCubeShaded(renderer.getCubeVertices(orbL, orb, 0), cam, glowBody.brighter().brighter());
+            renderer.drawCubeShaded(renderer.getCubeVertices(orbR, orb, 0), cam, glowBody.brighter().brighter());
+        }
+
+        // Patas bípedas en dos segmentos
+        double leftLegPhase = Math.sin(pulsePhase) * voxelSize * (evolved ? 0.7 : 0.5);
+        double rightLegPhase = Math.sin(pulsePhase + Math.PI) * voxelSize * (evolved ? 0.7 : 0.5);
+        int upperLeg = applyScaleToSize((int)(voxelSize * 0.8));
+        int lowerLeg = applyScaleToSize((int)(voxelSize * 0.7));
         
-        Vector3 legL = applyTransform(new Vector3(-voxelSize * 0.4, -voxelSize * 0.5 + Math.abs(leftLegPhase) * 0.2, leftLegPhase * 0.6));
-        legL = applyScaleToPosition(legL);
-        Vector3 legR = applyTransform(new Vector3(voxelSize * 0.4, -voxelSize * 0.5 + Math.abs(rightLegPhase) * 0.2, rightLegPhase * 0.6));
-        legR = applyScaleToPosition(legR);
-        renderer.drawCubeShaded(renderer.getCubeVertices(legL, legSize, 0), cam, glowBody.darker());
-        renderer.drawCubeShaded(renderer.getCubeVertices(legR, legSize, 0), cam, glowBody.darker());
+        Vector3 legLUp = applyTransform(new Vector3(-voxelSize * 0.5, -voxelSize * 0.3 + Math.abs(leftLegPhase) * 0.3, leftLegPhase * 0.5));
+        legLUp = applyScaleToPosition(legLUp);
+        Vector3 legLLo = applyTransform(new Vector3(-voxelSize * 0.55, -voxelSize * 0.9 + Math.abs(leftLegPhase) * 0.2, leftLegPhase * 0.3));
+        legLLo = applyScaleToPosition(legLLo);
+        Vector3 legRUp = applyTransform(new Vector3(voxelSize * 0.5, -voxelSize * 0.3 + Math.abs(rightLegPhase) * 0.3, rightLegPhase * 0.5));
+        legRUp = applyScaleToPosition(legRUp);
+        Vector3 legRLo = applyTransform(new Vector3(voxelSize * 0.55, -voxelSize * 0.9 + Math.abs(rightLegPhase) * 0.2, rightLegPhase * 0.3));
+        legRLo = applyScaleToPosition(legRLo);
+        renderer.drawCubeShaded(renderer.getCubeVertices(legLUp, upperLeg, 0), cam, glowBody.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(legLLo, lowerLeg, 0), cam, glowBody.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(legRUp, upperLeg, 0), cam, glowBody.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(legRLo, lowerLeg, 0), cam, glowBody.darker());
+
+        // Aro luminoso flotante solo fase 2/3
+        if (evolved) {
+            int ring = applyScaleToSize((int)(voxelSize * 0.9));
+            Vector3 halo = applyTransform(new Vector3(0, voxelSize * 2.8 + Math.sin(pulsePhase) * voxelSize * 0.3, -voxelSize * 0.2));
+            halo = applyScaleToPosition(halo);
+            renderer.drawCubeShaded(renderer.getCubeVertices(halo, ring, 0), cam, glowBody.brighter());
+
+            if (apex) {
+                int ring2 = applyScaleToSize((int)(voxelSize * 1.2));
+                Vector3 halo2 = applyTransform(new Vector3(0, voxelSize * 3.4 + Math.cos(pulsePhase) * voxelSize * 0.4, 0));
+                halo2 = applyScaleToPosition(halo2);
+                renderer.drawCubeShaded(renderer.getCubeVertices(halo2, ring2, 0), cam, glowBody.brighter().brighter());
+            }
+        }
+
+        // Núcleo luminoso marcado en fase 3
+        if (apex) {
+            int core = applyScaleToSize((int)(voxelSize * 1.0));
+            Vector3 corePos = applyTransform(new Vector3(0, voxelSize * 1.0, 0));
+            corePos = applyScaleToPosition(corePos);
+            renderer.drawCubeShaded(renderer.getCubeVertices(corePos, core, 0), cam, glowBody.brighter());
+        }
     }
 
     @Override
