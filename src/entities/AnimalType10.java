@@ -185,8 +185,20 @@ public class AnimalType10 extends BaseAnimal {
     }
 
     @Override
-    protected double getPhaseDuration() {
-        return 60.0; // 60 segundos por fase (evolución más lenta)
+    protected double getPhaseDuration(int phase) {
+        // Total: 180 segundos (3 minutos)
+        // Fase 1: 65s, Fase 2: 55s, Fase 3: 60s
+        switch (phase) {
+            case 1: return 65.0;
+            case 2: return 55.0;
+            case 3: return 60.0;
+            default: return 60.0;
+        }
+    }
+    
+    @Override
+    public int getSpeciesType() {
+        return 9;
     }
     
     @Override

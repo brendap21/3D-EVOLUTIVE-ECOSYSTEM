@@ -27,11 +27,14 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     protected double phaseTimer = 0.0;
     protected double transitionPulse = 0.0; // animation pulse when changing phase
     
-    // Método abstracto para que cada especie defina su tiempo de evolución
-    protected abstract double getPhaseDuration();
+    // Método abstracto para que cada especie defina su tiempo de evolución por fase (fase 1, 2, o 3)
+    protected abstract double getPhaseDuration(int phase);
     
     // Método abstracto para que cada especie defina sus cambios visuales por fase
     protected abstract void applyPhaseVisuals();
+    
+    // Método abstracto para que cada especie devuelva su tipo (0-9)
+    public abstract int getSpeciesType();
     
     // Movement / wandering
     protected Vector3 velocity = new Vector3(0, 0, 0);
@@ -53,6 +56,16 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     
     // Tracking for UI display
     private long spawnTime = 0L; // System.currentTimeMillis() when animal spawned
+    private long phaseStartTime = 0L; // System.currentTimeMillis() when current phase started
+    
+    // Reproduction system
+    private double reproductionCooldown = 0.0; // Cooldown timer to prevent multiple spawns
+    private static final double REPRODUCTION_COOLDOWN_DURATION = 10.0; // 10 seconds between reproductions
+    private boolean isMating = false; // Flag para animación de apareamiento
+    private double matingProgress = 0.0; // 0.0 a 1.0
+    private static final double MATING_DURATION = 1.5; // 1.5 segundos de animación
+    private BaseAnimal matingPartner = null; // Referencia al compañero
+    private boolean offspringSpawned = false; // Flag para evitar crear dos crías
     
     // Spawn animation
     private boolean isSpawning = true;
@@ -99,11 +112,6 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     
     @Override
     public void update() {
-        // Debug simple
-        if (animalId == 1 && !isSpawning && (int)(phaseTimer) % 10 == 0 && phaseTimer > 0.1 && phaseTimer < 0.2) {
-            System.out.println("UPDATE llamado - Animal 1, phaseTimer=" + phaseTimer + ", fase=" + growthPhase);
-        }
-        
         if (isSpawning) {
             spawnProgress += 0.016 / SPAWN_DURATION;
             if (spawnProgress >= 1.0) {
@@ -142,6 +150,10 @@ public abstract class BaseAnimal implements Renderable, Collidable {
             // Renderizar esfera de energía si está evolucionando
             if (transitionPulse > 0) {
                 renderEvolutionSphere(renderer, cam);
+            }
+            // Renderizar animación de apareamiento si está en proceso
+            if (isMating) {
+                renderMatingAnimation(renderer, cam);
             }
         }
     }
@@ -227,6 +239,67 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     
     // Método abstracto que cada tipo de animal debe implementar
     protected abstract void renderNormal(SoftwareRenderer renderer, Camera cam);
+    
+    /**
+     * Renderiza la animación de apareamiento: corazones flotantes entre los dos animales.
+     */
+    protected void renderMatingAnimation(SoftwareRenderer renderer, Camera cam) {
+        if (matingPartner == null || matingProgress >= 1.0) return;
+        
+        // Posición entre los dos animales
+        double midX = (posicion.x + matingPartner.posicion.x) / 2.0;
+        double midY = (posicion.y + matingPartner.posicion.y) / 2.0;
+        double midZ = (posicion.z + matingPartner.posicion.z) / 2.0;
+        
+        // Color rosa/rojo para los corazones
+        Color heartColor = new Color(255, 100, 150);
+        
+        // Generar múltiples corazones que flotan hacia arriba
+        int heartCount = 8;
+        for (int i = 0; i < heartCount; i++) {
+            double angle = (2 * Math.PI * i / heartCount) + matingProgress * Math.PI * 2;
+            double radius = voxelSize * 3.0;
+            double heightOffset = matingProgress * voxelSize * 8.0;
+            
+            // Movimiento en espiral
+            double x = midX + Math.cos(angle) * radius * (1.0 - matingProgress * 0.5);
+            double y = midY + heightOffset + Math.sin(matingProgress * Math.PI * 4) * voxelSize;
+            double z = midZ + Math.sin(angle) * radius * (1.0 - matingProgress * 0.5);
+            
+            // Tamaño del corazón (voxel)
+            int heartSize = Math.max(2, (int)(voxelSize * 0.8 * (1.0 - matingProgress * 0.5)));
+            
+            // Brillo pulsante
+            float brightness = (float)(0.7 + 0.3 * Math.sin(matingProgress * Math.PI * 6 + i));
+            Color pulseColor = new Color(
+                heartColor.getRed(),
+                Math.min(255, (int)(heartColor.getGreen() * brightness)),
+                Math.min(255, (int)(heartColor.getBlue() * brightness))
+            );
+            
+            Vector3[] heartVerts = renderer.getCubeVertices(new Vector3(x, y, z), heartSize, angle);
+            renderer.drawCube(heartVerts, cam, pulseColor);
+        }
+        
+        // Partículas brillantes adicionales
+        if (matingProgress > 0.5) {
+            int sparkCount = 12;
+            for (int i = 0; i < sparkCount; i++) {
+                double sparkAngle = (2 * Math.PI * i / sparkCount) + matingProgress * Math.PI * 4;
+                double sparkRadius = voxelSize * 2.0;
+                double sparkHeight = midY + (matingProgress - 0.5) * voxelSize * 4.0;
+                
+                double sx = midX + Math.cos(sparkAngle) * sparkRadius;
+                double sz = midZ + Math.sin(sparkAngle) * sparkRadius;
+                
+                int sparkSize = Math.max(1, (int)(voxelSize * 0.4));
+                Color sparkColor = new Color(255, 200, 220);
+                
+                Vector3[] sparkVerts = renderer.getCubeVertices(new Vector3(sx, sparkHeight, sz), sparkSize, 0);
+                renderer.drawCube(sparkVerts, cam, sparkColor);
+            }
+        }
+    }
     
     /**
      * Renderiza una esfera de energía durante la evolución.
@@ -516,18 +589,20 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     protected void updateGrowthPhase() {
         if (isSpawning) return; // don't change during spawn
         
-        double oldTimer = phaseTimer;
-        phaseTimer += 0.016;
-        
-        // Debug: imprimir cada 5 segundos solo para animal 1
-        if (animalId == 1 && ((int)phaseTimer % 5 == 0) && ((int)oldTimer % 5 != 0)) {
-            System.out.println("Animal 1 - Fase: " + growthPhase + " Timer: " + String.format("%.1f", phaseTimer) + "/" + String.format("%.1f", getPhaseDuration()));
+        // Inicializar el timer si no está inicializado
+        if (phaseStartTime == 0) {
+            phaseStartTime = System.currentTimeMillis();
         }
         
-        if (phaseTimer >= getPhaseDuration() && growthPhase < 3) {
+        // Calcular el tiempo transcurrido en esta fase en segundos
+        long currentTime = System.currentTimeMillis();
+        double elapsedSeconds = (currentTime - phaseStartTime) / 1000.0;
+        
+        // Verificar si ha pasado el tiempo necesario para la siguiente fase
+        if (elapsedSeconds >= getPhaseDuration(growthPhase) && growthPhase < 3) {
             System.out.println("¡EVOLUCIÓN! Animal " + animalId + " cambió de fase " + growthPhase + " a " + (growthPhase + 1));
             growthPhase++;
-            phaseTimer = 0.0;
+            phaseStartTime = System.currentTimeMillis(); // Reiniciar el contador para la nueva fase
             transitionPulse = 1.0; // trigger animation pulse
             applyPhaseVisuals(); // Aplicar cambios visuales específicos de la especie
             
@@ -546,6 +621,28 @@ public abstract class BaseAnimal implements Renderable, Collidable {
             transitionPulse = Math.max(0, transitionPulse - 0.04);
         }
         selectionScale = selectionScale * 0.98 + getPhaseScaleMultiplier() * 0.02;
+        
+        // Update reproduction cooldown
+        if (reproductionCooldown > 0) {
+            reproductionCooldown -= 0.016; // ~60 FPS
+        }
+        
+        // Update mating animation
+        if (isMating) {
+            matingProgress += 0.016 / MATING_DURATION;
+            if (matingProgress >= 1.0) {
+                // Animación completada, crear la cría (solo si este animal tiene ID menor para evitar duplicado)
+                if (matingPartner != null && !offspringSpawned && this.animalId < matingPartner.animalId) {
+                    spawnOffspring(matingPartner);
+                    offspringSpawned = true;
+                    // Marcar el partner para que no lo intente también
+                    matingPartner.offspringSpawned = true;
+                }
+                isMating = false;
+                matingProgress = 0.0;
+                matingPartner = null;
+            }
+        }
     }
 
     protected void updateMovement() {
@@ -609,6 +706,24 @@ public abstract class BaseAnimal implements Renderable, Collidable {
             if (c == this) continue;
             if (c instanceof entities.Pasto) continue; // ignore grass
             if (intersects(c)) {
+                // Check for reproduction if both are animals of the same species
+                if (c instanceof BaseAnimal) {
+                    BaseAnimal other = (BaseAnimal) c;
+                    // Only reproduce if:
+                    // 1. Both are the same species
+                    // 2. Both are adults (phase 3)
+                    // 3. This animal's cooldown has expired
+                    // 4. Neither is currently mating
+                    boolean sameSpecies = this.getSpeciesType() == other.getSpeciesType();
+                    boolean cooldownOk = this.reproductionCooldown <= 0 && other.reproductionCooldown <= 0;
+                    boolean notMating = !this.isMating && !other.isMating;
+                    
+                    if (sameSpecies && cooldownOk && notMating) {
+                        // Iniciar animación de apareamiento
+                        startMatingAnimation(other);
+                    }
+                }
+                
                 posicion = oldPos;
                 // Girar 90 grados
                 double angle = Math.atan2(velocity.z, velocity.x) - Math.PI / 2;
@@ -617,6 +732,98 @@ public abstract class BaseAnimal implements Renderable, Collidable {
                 yaw = Math.atan2(velocity.z, velocity.x);
                 break;
             }
+        }
+    }
+    
+    /**
+     * Inicia la animación de apareamiento entre dos animales.
+     */
+    private void startMatingAnimation(BaseAnimal partner) {
+        // Set cooldown for both parents
+        this.reproductionCooldown = REPRODUCTION_COOLDOWN_DURATION;
+        partner.reproductionCooldown = REPRODUCTION_COOLDOWN_DURATION;
+        
+        // Iniciar animación para ambos
+        this.isMating = true;
+        this.matingProgress = 0.0;
+        this.matingPartner = partner;
+        
+        partner.isMating = true;
+        partner.matingProgress = 0.0;
+        partner.matingPartner = this;
+        
+        // Separar ligeramente a los animales para evitar que se queden atrapados
+        Vector3 directionFromPartner = new Vector3(
+            this.posicion.x - partner.posicion.x,
+            0,
+            this.posicion.z - partner.posicion.z
+        );
+        double distance = Math.sqrt(directionFromPartner.x * directionFromPartner.x + directionFromPartner.z * directionFromPartner.z);
+        if (distance > 0.1) {
+            directionFromPartner = new Vector3(
+                directionFromPartner.x / distance,
+                0,
+                directionFromPartner.z / distance
+            );
+            double separationDistance = voxelSize * 3.0;
+            this.posicion = new Vector3(
+                this.posicion.x + directionFromPartner.x * separationDistance,
+                this.posicion.y,
+                this.posicion.z + directionFromPartner.z * separationDistance
+            );
+            
+            Vector3 directionFromThis = new Vector3(-directionFromPartner.x, 0, -directionFromPartner.z);
+            partner.posicion = new Vector3(
+                partner.posicion.x + directionFromThis.x * separationDistance,
+                partner.posicion.y,
+                partner.posicion.z + directionFromThis.z * separationDistance
+            );
+        }
+    }
+    
+    /**
+     * Crea una nueva cría después de la animación de apareamiento.
+     */
+    private void spawnOffspring(BaseAnimal partner) {
+        if (worldRef == null) return;
+        
+        // Calculate spawn position between the two parents
+        double childX = (this.posicion.x + partner.posicion.x) / 2.0;
+        double childZ = (this.posicion.z + partner.posicion.z) / 2.0;
+        
+        // Get terrain height at child position
+        double terrainHeight = worldRef.getHeightAt(childX, childZ);
+        if (terrainHeight == Double.NEGATIVE_INFINITY) terrainHeight = 0.0;
+        
+        double baseOffset = voxelSize * 1.5;
+        double childY = terrainHeight + baseOffset; // Phase 1 uses scale 1.0
+        
+        Vector3 childPos = new Vector3(childX, childY, childZ);
+        long childSeed = System.currentTimeMillis() + this.seed + partner.seed;
+        
+        // Create the new offspring using the static factory method
+        try {
+            int speciesType = this.getSpeciesType();
+            main.Renderable offspring = main.EcosistemaApp.createAnimalOfType(speciesType, childPos, childSeed);
+            
+            if (offspring != null) {
+                // Los animales heredan de BaseAnimal que implementa Renderable
+                if (offspring instanceof BaseAnimal) {
+                    BaseAnimal babyAnimal = (BaseAnimal) offspring;
+                    // El bebé tiene un cooldown de reproducción para evitar reproducirse inmediatamente
+                    babyAnimal.reproductionCooldown = REPRODUCTION_COOLDOWN_DURATION * 2; // El bebé no puede reproducirse por 20 segundos
+                    worldRef.addEntity(offspring);
+                    System.out.println("¡REPRODUCCIÓN EXITOSA! Animal " + this.animalId + " y " + partner.animalId + 
+                                     " tuvieron una cría (Especie " + speciesType + ")");
+                } else {
+                    System.err.println("El offspring no es un BaseAnimal");
+                }
+            } else {
+                System.err.println("offspring es null");
+            }
+        } catch (Exception e) {
+            System.err.println("Error en reproducción: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -644,7 +851,11 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     public int getAnimalId() { return animalId; }
     
     public int getGrowthPhase() { return growthPhase; }
-    public double getPhaseTimer() { return phaseTimer; }
+    public double getPhaseTimer() { 
+        if (phaseStartTime == 0) return 0.0;
+        long currentTime = System.currentTimeMillis();
+        return (currentTime - phaseStartTime) / 1000.0;
+    }
     public String getSpeciesName() { return getClass().getSimpleName().replace("AnimalType", "Especie "); }
     public double getBaseSpeed() { return baseSpeed; }
     public long getSpawnTime() { return spawnTime; }
@@ -655,20 +866,25 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     
     // Public getter for phase duration (delegates to protected method)
     public double getPhaseDurationPublic() {
-        return getPhaseDuration();
+        return getPhaseDuration(growthPhase);
     }
     
     // Calculate time remaining until next phase evolution
     public double getTimeToNextPhase() {
         if (growthPhase >= 3) return 0.0;
-        return Math.max(0.0, getPhaseDuration() - phaseTimer);
+        if (phaseStartTime == 0) return getPhaseDuration(growthPhase);
+        
+        long currentTime = System.currentTimeMillis();
+        double elapsedSeconds = (currentTime - phaseStartTime) / 1000.0;
+        double remainingSeconds = getPhaseDuration(growthPhase) - elapsedSeconds;
+        return Math.max(0.0, remainingSeconds);
     }
     
     // Advance to next growth phase (if possible)
     public void advanceToNextPhase() {
         if (growthPhase < 3) {
             growthPhase++;
-            phaseTimer = 0.0;
+            phaseStartTime = System.currentTimeMillis();
             transitionPulse = 1.0;
             applyPhaseVisuals();
             // Reajustar altura al terreno con el nuevo tamaño
@@ -688,7 +904,7 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     public void revertToPreviousPhase() {
         if (growthPhase > 1) {
             growthPhase--;
-            phaseTimer = 0.0;
+            phaseStartTime = System.currentTimeMillis();
             transitionPulse = 1.0;
             applyPhaseVisuals();
             // Reajustar altura al terreno con el nuevo tamaño
