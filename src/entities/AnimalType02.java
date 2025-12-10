@@ -1,6 +1,5 @@
 package entities;
 
-import main.Renderable;
 import render.SoftwareRenderer;
 import math.Vector3;
 import math.Camera;
@@ -10,15 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AnimalType02: "Bípedo Compacto" (bipedal compact)
- * Color: Naranja-rojo, voxel pequeño.
- * Forma: Cabeza grande, cuerpo central, 2 patas.
- * Evolución: Aumenta tamaño de voxel, muta hacia rojos más intensos.
+ * AnimalType02: Bípedo compacto con ojos grandes, pico y cresta.
+ * Paleta fase 1 (3 colores): naranja fuego, rojo coral, amarillo quemado.
+ * Fase 2-3 crece en altura, mueve brazos/alas.
  */
 public class AnimalType02 extends BaseAnimal {
-    private double rotY = 0.0;
-    private double bob = 0.0;
-    private double speed = 1.8;
+    private double animPhase = 0.0;
 
     public AnimalType02(Vector3 posicion, long seed) {
         this.posicion = posicion;
@@ -30,69 +26,107 @@ public class AnimalType02 extends BaseAnimal {
 
     private void generateFromSeed(long seed) {
         Random r = new Random(seed);
-        this.voxelSize = 8 + r.nextInt(4); // 3..5 pixels
-        
-        // Color: orange-red
-        int rcol = 150 + r.nextInt(105);
-        int gcol = 60 + r.nextInt(80);
-        int bcol = 20 + r.nextInt(60);
-        this.color = new Color(rcol, gcol, bcol);
-        
-        this.speed = 1.5 + r.nextDouble() * 1.2;
+        this.voxelSize = 3 + r.nextInt(2); // MÁS pequeño (3-4 en lugar de 7-9)
+        this.baseVoxelSize = voxelSize;
+        Color[] palette = new Color[]{
+            new Color(230, 120, 40),
+            new Color(210, 80, 70),
+            new Color(200, 140, 40)
+        };
+        this.color = palette[r.nextInt(palette.length)];
+        this.originalColor = color;
+        this.baseSpeed = 1.3 + r.nextDouble() * 0.5;
 
-        // Ultra-simplified biped: 3 voxels
-        voxels.add(new Vector3(0, 1, 0));  // Head
-        voxels.add(new Vector3(0, 0, 0));  // Body
-        voxels.add(new Vector3(0, -1, 0)); // Leg
-    }
-
-    public void mutate(long newSeed) {
-        Random r = new Random(newSeed);
-        // Intensify red
-        int r1 = Math.min(255, color.getRed() + r.nextInt(50) - 10);
-        int g1 = Math.max(0, color.getGreen() - r.nextInt(30));
-        int b1 = Math.max(0, color.getBlue() - r.nextInt(30));
-        this.color = new Color(r1, g1, b1);
-        
-        // Increase size
-        voxelSize = Math.max(12, Math.min(32, voxelSize + r.nextInt(7) - 2));
-        
-        this.speed = Math.min(4.0, speed * (0.95 + r.nextDouble() * 0.25));
-    }
-
-    public Vector3 getAABBMin() {
-        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            minX = Math.min(minX, v.x * voxelSize);
-            minY = Math.min(minY, v.y * voxelSize);
-            minZ = Math.min(minZ, v.z * voxelSize);
-        }
-        return new Vector3(posicion.x + minX, posicion.y + minY, posicion.z + minZ);
-    }
-
-    public Vector3 getAABBMax() {
-        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            maxX = Math.max(maxX, (v.x + 1) * voxelSize);
-            maxY = Math.max(maxY, (v.y + 1) * voxelSize);
-            maxZ = Math.max(maxZ, (v.z + 1) * voxelSize);
-        }
-        return new Vector3(posicion.x + maxX, posicion.y + maxY, posicion.z + maxZ);
+        // Cuerpo
+        voxels.add(new Vector3(0, 0, 0));
+        voxels.add(new Vector3(0, 1, 0));
+        // Cabeza grande
+        voxels.add(new Vector3(0, 2, 0));
+        voxels.add(new Vector3(0, 3, 0));
+        // Patas
+        voxels.add(new Vector3(0, -1, 0));
+        voxels.add(new Vector3(0, -1, 1));
+        // Brazos/alas
+        voxels.add(new Vector3(1, 1, 0));
+        voxels.add(new Vector3(-1, 1, 0));
     }
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        Color glowColor = applyGlowToColor(color);
-        for (Vector3 voxel : voxels) {
-            Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize
-            );
-            worldPos = applyScaleToPosition(worldPos);
-            int scaledSize = applyScaleToSize(voxelSize);
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
-            renderer.drawCubeShaded(vertices, cam, glowColor);
+        animPhase += 0.15 * getPhaseSpeedMultiplier();
+        Color body = applyGlowToColor(originalColor);
+
+        // Cuerpo base
+        for (Vector3 v : voxels) {
+            Vector3 wp = applyTransform(new Vector3(v.x * voxelSize, v.y * voxelSize, v.z * voxelSize));
+            wp = applyScaleToPosition(wp);
+            int s = applyScaleToSize(voxelSize);
+            renderer.drawCubeShaded(renderer.getCubeVertices(wp, s, 0), cam, body);
         }
+
+        // Cresta
+        int crestSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.6)));
+        for (int i = 0; i < 2; i++) {
+            Vector3 cpos = applyTransform(new Vector3(0, voxelSize * (3.5 + i), voxelSize * 0.2));
+            cpos = applyScaleToPosition(cpos);
+            renderer.drawCubeShaded(renderer.getCubeVertices(cpos, crestSize, 0), cam, body.darker());
+        }
+
+        // Ojos
+        int eye = Math.max(1, applyScaleToSize((int)(voxelSize * 0.35)));
+        Color eyeW = new Color(245, 245, 245);
+        Color pupil = new Color(30, 30, 40);
+        Vector3 eyeL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 2.6, voxelSize * 0.9));
+        eyeL = applyScaleToPosition(eyeL);
+        Vector3 eyeR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 2.6, voxelSize * 0.9));
+        eyeR = applyScaleToPosition(eyeR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeL, eye, 0), cam, eyeW);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeR, eye, 0), cam, eyeW);
+        int pup = Math.max(1, eye / 2);
+        Vector3 pupilL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 2.6, voxelSize * 0.9 + pup));
+        pupilL = applyScaleToPosition(pupilL);
+        Vector3 pupilR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 2.6, voxelSize * 0.9 + pup));
+        pupilR = applyScaleToPosition(pupilR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilL, pup, 0), cam, pupil);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilR, pup, 0), cam, pupil);
+
+        // Pico/boca
+        int beak = Math.max(1, applyScaleToSize((int)(voxelSize * 0.5)));
+        Vector3 beakPos = applyTransform(new Vector3(0, voxelSize * 2.1, voxelSize * 1.2));
+        beakPos = applyScaleToPosition(beakPos);
+        renderer.drawCubeShaded(renderer.getCubeVertices(beakPos, beak, 0), cam, new Color(240, 180, 60));
+
+        // Patas bípedas (se alternan al caminar)
+        double leftLegPhase = Math.sin(animPhase) * voxelSize * 0.4;
+        double rightLegPhase = Math.sin(animPhase + Math.PI) * voxelSize * 0.4;
+        int legSize = applyScaleToSize((int)(voxelSize * 0.75));
+        
+        // Pata izquierda
+        Vector3 leftLeg = applyTransform(new Vector3(
+            -voxelSize * 0.4,
+            -voxelSize * 0.5 + Math.abs(leftLegPhase) * 0.2,
+            leftLegPhase * 0.6
+        ));
+        leftLeg = applyScaleToPosition(leftLeg);
+        renderer.drawCubeShaded(renderer.getCubeVertices(leftLeg, legSize, 0), cam, body.darker());
+        
+        // Pata derecha
+        Vector3 rightLeg = applyTransform(new Vector3(
+            voxelSize * 0.4,
+            -voxelSize * 0.5 + Math.abs(rightLegPhase) * 0.2,
+            rightLegPhase * 0.6
+        ));
+        rightLeg = applyScaleToPosition(rightLeg);
+        renderer.drawCubeShaded(renderer.getCubeVertices(rightLeg, legSize, 0), cam, body.darker());
+        
+        // Brazos/alas (oscilan arriba/abajo opuestos a las patas para balance)
+        double wingOff = Math.sin(animPhase) * voxelSize * 0.3;
+        int wingSize = applyScaleToSize((int)(voxelSize * 0.85));
+        Vector3 wingL = applyTransform(new Vector3(-voxelSize * 1.2, voxelSize * 1.2 + wingOff, 0));
+        wingL = applyScaleToPosition(wingL);
+        Vector3 wingR = applyTransform(new Vector3(voxelSize * 1.2, voxelSize * 1.2 - wingOff, 0));
+        wingR = applyScaleToPosition(wingR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(wingL, wingSize, 0), cam, body.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(wingR, wingSize, 0), cam, body.darker());
     }
 }

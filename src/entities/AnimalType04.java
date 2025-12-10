@@ -1,6 +1,5 @@
 package entities;
 
-import main.Renderable;
 import render.SoftwareRenderer;
 import math.Vector3;
 import math.Camera;
@@ -10,15 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AnimalType04: "Criatura Alargada" (elongated creature)
- * Color: Amarillo-verdoso, voxel fino.
- * Forma: Cuerpo alargado tipo serpiente (múltiples voxels en línea).
- * Evolución: Se alarga más, muta tonos de amarillo.
+ * AnimalType04: Criatura serpentina alargada con aletas laterales.
+ * Paleta fase 1 (3 colores): amarillo lima, verde limón, chartreuse.
+ * Fase 2-3 se alarga más, movimiento ondulante pronunciado.
  */
 public class AnimalType04 extends BaseAnimal {
-    private double rotY = 0.0;
-    private double bob = 0.0;
-    private double speed = 1.2;
+    private double undulatePhase = 0.0;
 
     public AnimalType04(Vector3 posicion, long seed) {
         this.posicion = posicion;
@@ -30,72 +26,88 @@ public class AnimalType04 extends BaseAnimal {
 
     private void generateFromSeed(long seed) {
         Random r = new Random(seed);
-        this.voxelSize = 8 + r.nextInt(4); // 3..4 pixels
-        
-        // Color: yellow-green
-        int rcol = 100 + r.nextInt(100);
-        int gcol = 150 + r.nextInt(80);
-        int bcol = 30 + r.nextInt(60);
-        this.color = new Color(rcol, gcol, bcol);
-        
-        this.speed = 1.0 + r.nextDouble() * 1.0;
+        this.voxelSize = 3 + r.nextInt(2);
+        this.baseVoxelSize = voxelSize;
+        Color[] palette = new Color[]{
+            new Color(180, 200, 60),
+            new Color(150, 220, 70),
+            new Color(190, 210, 50)
+        };
+        this.color = palette[r.nextInt(palette.length)];
+        this.originalColor = color;
+        this.baseSpeed = 1.4 + r.nextDouble() * 0.5;
 
-        // Ultra-simplified elongated: 3 voxels in a line
-        voxels.add(new Vector3(0, 0, -1));  // Head
-        voxels.add(new Vector3(0, 0, 0));   // Middle
-        voxels.add(new Vector3(0, 0, 1));   // Tail
-    }
-
-    public void mutate(long newSeed) {
-        Random r = new Random(newSeed);
-        // Shift yellow-green tones
-        int r1 = Math.min(255, color.getRed() + r.nextInt(50) - 20);
-        int g1 = Math.min(255, color.getGreen() + r.nextInt(50) - 20);
-        int b1 = Math.max(0, color.getBlue() + r.nextInt(40) - 30);
-        this.color = new Color(r1, g1, b1);
-        
-        // Possibly add a segment
-        if (r.nextDouble() < 0.35 && voxels.size() < 12) {
-            int idx = r.nextInt(voxels.size());
-            Vector3 base = voxels.get(idx);
-            voxels.add(new Vector3(base.x + r.nextInt(3) - 1, base.y, base.z + r.nextInt(3) - 1));
+        // Cuerpo alargado (segmentos)
+        for (int i = -2; i <= 2; i++) {
+            voxels.add(new Vector3(0, 0, i));
         }
-    }
-
-    public Vector3 getAABBMin() {
-        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            minX = Math.min(minX, v.x * voxelSize);
-            minY = Math.min(minY, v.y * voxelSize);
-            minZ = Math.min(minZ, v.z * voxelSize);
-        }
-        return new Vector3(posicion.x + minX, posicion.y + minY, posicion.z + minZ);
-    }
-
-    public Vector3 getAABBMax() {
-        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            maxX = Math.max(maxX, (v.x + 1) * voxelSize);
-            maxY = Math.max(maxY, (v.y + 1) * voxelSize);
-            maxZ = Math.max(maxZ, (v.z + 1) * voxelSize);
-        }
-        return new Vector3(posicion.x + maxX, posicion.y + maxY, posicion.z + maxZ);
     }
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        Color glowColor = applyGlowToColor(color);
-        for (int i = 0; i < voxels.size(); i++) {
-            Vector3 voxel = voxels.get(i);
-            Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize
-            );
-            worldPos = applyScaleToPosition(worldPos);
-            int scaledSize = applyScaleToSize(voxelSize);
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
-            renderer.drawCubeShaded(vertices, cam, glowColor);
+        undulatePhase += 0.2 * getPhaseSpeedMultiplier();
+        Color body = applyGlowToColor(originalColor);
+
+        // Segmentos del cuerpo con ondulación (más segmentos en fases avanzadas)
+        int segments = 5 + growthPhase * 2;
+        for (int i = 0; i < segments; i++) {
+            double offset = Math.sin(undulatePhase + i * 0.5) * voxelSize * 0.6;
+            Vector3 wp = applyTransform(new Vector3(
+                offset,
+                Math.sin(undulatePhase + i * 0.3) * voxelSize * 0.3,
+                -voxelSize * 2 + i * voxelSize * 0.8
+            ));
+            wp = applyScaleToPosition(wp);
+            int s = applyScaleToSize(voxelSize);
+            renderer.drawCubeShaded(renderer.getCubeVertices(wp, s, 0), cam, body);
         }
+
+        // Cabeza (primer segmento)
+        Vector3 headPos = applyTransform(new Vector3(0, 0, voxelSize * 2));
+        headPos = applyScaleToPosition(headPos);
+        int headSize = applyScaleToSize((int)(voxelSize * 1.2));
+        renderer.drawCubeShaded(renderer.getCubeVertices(headPos, headSize, 0), cam, body.brighter());
+
+        // Ojos en la cabeza
+        int eyeSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.35)));
+        Color eyeW = new Color(255, 255, 200);
+        Color pupil = new Color(50, 50, 20);
+        Vector3 eyeL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 0.3, voxelSize * 2.3));
+        eyeL = applyScaleToPosition(eyeL);
+        Vector3 eyeR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 0.3, voxelSize * 2.3));
+        eyeR = applyScaleToPosition(eyeR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeL, eyeSize, 0), cam, eyeW);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeR, eyeSize, 0), cam, eyeW);
+        int pup = Math.max(1, eyeSize / 2);
+        Vector3 pupilL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 0.3, voxelSize * 2.3 + pup));
+        pupilL = applyScaleToPosition(pupilL);
+        Vector3 pupilR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 0.3, voxelSize * 2.3 + pup));
+        pupilR = applyScaleToPosition(pupilR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilL, pup, 0), cam, pupil);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilR, pup, 0), cam, pupil);
+
+        // Boca
+        int mouthSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.3)));
+        Vector3 mouth = applyTransform(new Vector3(0, -voxelSize * 0.2, voxelSize * 2.5));
+        mouth = applyScaleToPosition(mouth);
+        renderer.drawCubeShaded(renderer.getCubeVertices(mouth, mouthSize, 0), cam, new Color(160, 80, 40));
+
+        // Aletas laterales (ondulantes)
+        int finCount = 3 + growthPhase;
+        int finSize = applyScaleToSize((int)(voxelSize * 0.6));
+        for (int i = 0; i < finCount; i++) {
+            double finWave = Math.sin(undulatePhase + i * 0.8) * voxelSize * 0.4;
+            Vector3 finL = applyTransform(new Vector3(-voxelSize * 1.2 + finWave, 0, -voxelSize + i * voxelSize * 0.9));
+            finL = applyScaleToPosition(finL);
+            Vector3 finR = applyTransform(new Vector3(voxelSize * 1.2 - finWave, 0, -voxelSize + i * voxelSize * 0.9));
+            finR = applyScaleToPosition(finR);
+            renderer.drawCubeShaded(renderer.getCubeVertices(finL, finSize, 0), cam, body.darker());
+            renderer.drawCubeShaded(renderer.getCubeVertices(finR, finSize, 0), cam, body.darker());
+        }
+    }
+
+    @Override
+    public String getSpeciesName() {
+        return "Serpiente Lima";
     }
 }

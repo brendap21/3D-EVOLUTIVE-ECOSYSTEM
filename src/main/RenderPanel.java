@@ -831,6 +831,63 @@ public class RenderPanel extends JPanel {
         String animalInfo = "ID: #" + selectedAnimal.getAnimalId();
         PixelFont.drawText(renderer, panelX + 15, panelY + 50, animalInfo, 3, new Color(255, 255, 150));
         
+        // Draw species name
+        if (selectedAnimal instanceof entities.BaseAnimal) {
+            entities.BaseAnimal ba = (entities.BaseAnimal) selectedAnimal;
+            String species = ba.getSpeciesName();
+            PixelFont.drawText(renderer, panelX + 15, panelY + 75, species, 1, new Color(200, 200, 200));
+            
+            // Draw growth phase
+            String phaseName = "";
+            int phase = ba.getGrowthPhase();
+            switch(phase) {
+                case 1: phaseName = "FASE 1: Cria"; break;
+                case 2: phaseName = "FASE 2: Joven"; break;
+                case 3: phaseName = "FASE 3: Adulto"; break;
+            }
+            PixelFont.drawText(renderer, panelX + 15, panelY + 90, phaseName, 2, new Color(100, 255, 150));
+            
+            // Draw phase progress
+            double progress = ba.getPhaseTimer();
+            double maxTime = 60.0;
+            int progressPercent = (int)((progress / maxTime) * 100);
+            if (phase < 3) {
+                String progressText = "Progreso: " + progressPercent + "%";
+                PixelFont.drawText(renderer, panelX + 15, panelY + 110, progressText, 1, new Color(180, 180, 255));
+                
+                // Progress bar
+                int barWidth = 220;
+                int barHeight = 8;
+                int barX = panelX + 15;
+                int barY = panelY + 125;
+                
+                // Background
+                for (int y = barY; y < barY + barHeight; y++) {
+                    for (int x = barX; x < barX + barWidth; x++) {
+                        if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                            try {
+                                buffer.setRGB(x, y, new Color(40, 40, 60).getRGB());
+                            } catch (Exception e) {}
+                        }
+                    }
+                }
+                
+                // Progress fill
+                int fillWidth = (int)(barWidth * (progress / maxTime));
+                for (int y = barY; y < barY + barHeight; y++) {
+                    for (int x = barX; x < barX + fillWidth; x++) {
+                        if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                            try {
+                                buffer.setRGB(x, y, new Color(100, 200, 255).getRGB());
+                            } catch (Exception e) {}
+                        }
+                    }
+                }
+            } else {
+                PixelFont.drawText(renderer, panelX + 15, panelY + 110, "Evolucion completa", 1, new Color(255, 215, 0));
+            }
+        }
+        
         // Draw decorative line
         Color lineColor = new Color(100, 180, 220);
         for (int x = panelX + 15; x < panelX + panelWidth - 15; x++) {

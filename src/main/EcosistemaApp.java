@@ -11,6 +11,7 @@ import java.awt.Color;
 import ui.Controles;
 
 public class EcosistemaApp {
+    private static simulation.Mundo mundoRef;
     public static void main(String[] args){
         int ancho = 1000, alto = 700;
 
@@ -27,6 +28,7 @@ public class EcosistemaApp {
 
         // Use Mundo to manage entities and animals
         simulation.Mundo mundo = new simulation.Mundo();
+        mundoRef = mundo;
         // Expand terrain: 160x160 grid, 8-unit scale = 1280 world units
         mundo.addEntity(new Terreno(160, 160, 8.0, 12345L, new Color(60, 140, 60)));
 
@@ -135,6 +137,7 @@ public class EcosistemaApp {
      * Create an animal of the specified type (0-9).
      */
     public static Renderable createAnimalOfType(int type, Vector3 pos, long seed) {
+        entities.BaseAnimal.setWorld(mundoRef);
         switch (type) {
             case 0: return new AnimalType01(pos, seed);
             case 1: return new AnimalType02(pos, seed);

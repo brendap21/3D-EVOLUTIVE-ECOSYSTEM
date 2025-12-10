@@ -1,6 +1,5 @@
 package entities;
 
-import main.Renderable;
 import render.SoftwareRenderer;
 import math.Vector3;
 import math.Camera;
@@ -10,15 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AnimalType01: "Cuadrúpedo Ágil" (4-legged agile creature)
- * Color base: Verde azulado, voxel mediano.
- * Forma: Cabeza pequeña, cuerpo principal rectangular, 4 patas.
- * Evolución: Muta color hacia tonos más brillantes, aumenta velocidad.
+ * AnimalType01: Felino ágil cuadrúpedo con orejas puntiagudas y cola.
+ * Paleta fase 1 (3 colores posibles): teal, menta, azul verdoso.
+ * Fase 2-3 crece en tamaño, más velocidad y cola más larga.
  */
 public class AnimalType01 extends BaseAnimal {
-    private double rotY = 0.0;
-    private double bob = 0.0;
-    private double speed = 2.5; // faster type
+    private double walkPhase = 0.0;
 
     public AnimalType01(Vector3 posicion, long seed) {
         this.posicion = posicion;
@@ -30,94 +26,144 @@ public class AnimalType01 extends BaseAnimal {
 
     private void generateFromSeed(long seed) {
         Random r = new Random(seed);
-        this.voxelSize = 3 + r.nextInt(3); // 3..5 pixels (MUY pequeño)
-        
-        // Base color: teal to cyan
-        int rcol = 50 + r.nextInt(100);
-        int gcol = 120 + r.nextInt(80);
-        int bcol = 130 + r.nextInt(70);
-        this.color = new Color(rcol, gcol, bcol);
-        
-        this.speed = 2.0 + r.nextDouble() * 1.5;
+        this.voxelSize = 3 + r.nextInt(2); // MÁS pequeño (3-4 en lugar de 6-8)
+        this.baseVoxelSize = voxelSize;
+        Color[] palette = new Color[]{
+            new Color(60, 180, 170),
+            new Color(40, 200, 140),
+            new Color(70, 170, 200)
+        };
+        this.color = palette[r.nextInt(palette.length)];
+        this.originalColor = this.color;
+        this.baseSpeed = 1.6 + r.nextDouble() * 0.6;
 
-        // Ultra-simplified: only 3 voxels (head + body + 1 leg)
-        voxels.add(new Vector3(0, 1, 0));  // Head
-        voxels.add(new Vector3(0, 0, 0));  // Body
-        voxels.add(new Vector3(0, -1, 0)); // Leg
-    }
+        // Voxels base (torso compacto)
+        voxels.add(new Vector3(0, 0, 0));
+        voxels.add(new Vector3(1, 0, 0));
+        voxels.add(new Vector3(-1, 0, 0));
+        voxels.add(new Vector3(0, 1, 0));
 
-    public void mutate(long newSeed) {
-        Random r = new Random(newSeed);
-        // Brighten color slightly
-        int r1 = Math.min(255, color.getRed() + r.nextInt(40) - 20);
-        int g1 = Math.min(255, color.getGreen() + r.nextInt(40) - 20);
-        int b1 = Math.min(255, color.getBlue() + r.nextInt(40) - 20);
-        this.color = new Color(Math.max(0, r1), Math.max(0, g1), Math.max(0, b1));
-        
-        // Increase speed
-        this.speed = Math.min(5.0, speed * (0.9 + r.nextDouble() * 0.3));
-        
-        // Slight size change
-        voxelSize = Math.max(10, Math.min(30, voxelSize + r.nextInt(5) - 2));
-    }
+        // Cabeza
+        voxels.add(new Vector3(0, 2, 1));
 
-    public Vector3 getAABBMin() {
-        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            minX = Math.min(minX, v.x * voxelSize);
-            minY = Math.min(minY, v.y * voxelSize);
-            minZ = Math.min(minZ, v.z * voxelSize);
-        }
-        return new Vector3(posicion.x + minX, posicion.y + minY, posicion.z + minZ);
-    }
+        // Patas delanteras
+        voxels.add(new Vector3(-1, -1, 1));
+        voxels.add(new Vector3(1, -1, 1));
+        // Patas traseras
+        voxels.add(new Vector3(-1, -1, -1));
+        voxels.add(new Vector3(1, -1, -1));
 
-    public Vector3 getAABBMax() {
-        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            maxX = Math.max(maxX, (v.x + 1) * voxelSize);
-            maxY = Math.max(maxY, (v.y + 1) * voxelSize);
-            maxZ = Math.max(maxZ, (v.z + 1) * voxelSize);
-        }
-        return new Vector3(posicion.x + maxX, posicion.y + maxY, posicion.z + maxZ);
+        // Cola base
+        voxels.add(new Vector3(0, 1, -1));
     }
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        Color glowColor = applyGlowToColor(color);
-        
+        walkPhase += 0.18 * getPhaseSpeedMultiplier();
+        Color bodyColor = applyGlowToColor(originalColor);
+
+        // Dibujar cuerpo base con rotación
         for (Vector3 voxel : voxels) {
-            Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize
+            Vector3 relativePos = new Vector3(
+                voxel.x * voxelSize,
+                voxel.y * voxelSize,
+                voxel.z * voxelSize
             );
-            worldPos = applyScaleToPosition(worldPos);
-            int scaledSize = applyScaleToSize(voxelSize);
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
-            renderer.drawCubeShaded(vertices, cam, glowColor);
+            Vector3 wp = applyTransform(relativePos);
+            wp = applyScaleToPosition(wp);
+            int s = applyScaleToSize(voxelSize);
+            double rot = 0;
+            Vector3[] verts = renderer.getCubeVertices(wp, s, rot);
+            renderer.drawCubeShaded(verts, cam, bodyColor);
         }
+
+        // Orejas (triangulitos usando cubos pequeños) - rotadas con el cuerpo
+        int earSize = applyScaleToSize((int)(voxelSize * 0.6));
+        Vector3 earL = applyTransform(new Vector3(-voxelSize * 0.6, voxelSize * 3.0, voxelSize * 1.0));
+        Vector3 earR = applyTransform(new Vector3(voxelSize * 0.6, voxelSize * 3.0, voxelSize * 1.0));
+        earL = applyScaleToPosition(earL);
+        earR = applyScaleToPosition(earR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(earL, earSize, 0), cam, bodyColor.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(earR, earSize, 0), cam, bodyColor.darker());
+
+        // Ojos
+        int eyeSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.35)));
+        Color eyeWhite = new Color(240, 240, 240);
+        Color pupil = new Color(20, 40, 40);
+        Vector3 eyeL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 2.2, voxelSize * 1.6));
+        Vector3 eyeR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 2.2, voxelSize * 1.6));
+        eyeL = applyScaleToPosition(eyeL);
+        eyeR = applyScaleToPosition(eyeR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeL, eyeSize, 0), cam, eyeWhite);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeR, eyeSize, 0), cam, eyeWhite);
+        int pupilSize = Math.max(1, eyeSize / 2);
+        Vector3 pupilL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 2.2, voxelSize * 1.6 + pupilSize));
+        Vector3 pupilR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 2.2, voxelSize * 1.6 + pupilSize));
+        pupilL = applyScaleToPosition(pupilL);
+        pupilR = applyScaleToPosition(pupilR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilL, pupilSize, 0), cam, pupil);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilR, pupilSize, 0), cam, pupil);
+
+        // Boca
+        int mouthSize = Math.max(1, eyeSize / 2);
+        Vector3 mouth = applyTransform(new Vector3(0, voxelSize * 1.7, voxelSize * 1.8));
+        mouth = applyScaleToPosition(mouth);
+        renderer.drawCubeShaded(renderer.getCubeVertices(mouth, mouthSize, 0), cam, new Color(90, 40, 40));
+
+        // Cola extendida segun fase
+        int tailLen = growthPhase == 1 ? 1 : (growthPhase == 2 ? 2 : 3);
+        for (int i = 0; i < tailLen; i++) {
+            Vector3 tpos = applyTransform(new Vector3(0, voxelSize * 1.0, -voxelSize * (1.2 + i)));
+            tpos = applyScaleToPosition(tpos);
+            int ts = applyScaleToSize((int)(voxelSize * 0.8));
+            renderer.drawCubeShaded(renderer.getCubeVertices(tpos, ts, 0), cam, bodyColor);
+        }
+
+        // Animación realista de caminar: patas delanteras y traseras se alternan
+        // Pata delantera izquierda y trasera derecha se mueven juntas
+        // Pata delantera derecha y trasera izquierda se mueven juntas
+        double frontLeftLeg = Math.sin(walkPhase) * voxelSize * 0.3;
+        double frontRightLeg = Math.sin(walkPhase + Math.PI) * voxelSize * 0.3;
+        double backLeftLeg = Math.sin(walkPhase + Math.PI) * voxelSize * 0.3; // opuesto a front left
+        double backRightLeg = Math.sin(walkPhase) * voxelSize * 0.3; // opuesto a front right
         
-        // Draw eyes (small white cubes)
-        Vector3 headPos = new Vector3(posicion.x, posicion.y + 3 * voxelSize, posicion.z);
-        Vector3 eyeLeft = new Vector3(headPos.x - voxelSize * 0.3, headPos.y + voxelSize * 0.2, headPos.z - voxelSize * 0.3);
-        Vector3 eyeRight = new Vector3(headPos.x + voxelSize * 0.3, headPos.y + voxelSize * 0.2, headPos.z - voxelSize * 0.3);
+        int legSize = applyScaleToSize((int)(voxelSize * 0.85));
+        Color paw = bodyColor.darker();
         
-        eyeLeft = applyScaleToPosition(eyeLeft);
-        eyeRight = applyScaleToPosition(eyeRight);
+        // Pata delantera izquierda (avanza con trasera derecha) - AJUSTAR Y para que sea visible
+        Vector3 frontLeft = applyTransform(new Vector3(
+            -voxelSize, 
+            -voxelSize * 0.5 + Math.abs(frontLeftLeg) * 0.3,  // Ajustado para ser más visible
+            voxelSize + frontLeftLeg * 0.5
+        ));
+        frontLeft = applyScaleToPosition(frontLeft);
+        renderer.drawCubeShaded(renderer.getCubeVertices(frontLeft, legSize, 0), cam, paw);
         
-        int eyeSize = applyScaleToSize((int)(voxelSize * 0.25));
-        Vector3[] eyeVerticesL = renderer.getCubeVertices(eyeLeft, eyeSize, 0);
-        Vector3[] eyeVerticesR = renderer.getCubeVertices(eyeRight, eyeSize, 0);
-        renderer.drawCubeShaded(eyeVerticesL, cam, new Color(255, 255, 255));
-        renderer.drawCubeShaded(eyeVerticesR, cam, new Color(255, 255, 255));
+        // Pata delantera derecha (avanza con trasera izquierda)
+        Vector3 frontRight = applyTransform(new Vector3(
+            voxelSize,
+            -voxelSize * 0.5 + Math.abs(frontRightLeg) * 0.3,  // Ajustado
+            voxelSize + frontRightLeg * 0.5
+        ));
+        frontRight = applyScaleToPosition(frontRight);
+        renderer.drawCubeShaded(renderer.getCubeVertices(frontRight, legSize, 0), cam, paw);
         
-        // Draw pupils (small black cubes)
-        Vector3 pupilLeft = new Vector3(eyeLeft.x, eyeLeft.y, eyeLeft.z - eyeSize * 0.5);
-        Vector3 pupilRight = new Vector3(eyeRight.x, eyeRight.y, eyeRight.z - eyeSize * 0.5);
-        int pupilSize = (int)(eyeSize * 0.5);
-        Vector3[] pupilVerticesL = renderer.getCubeVertices(pupilLeft, pupilSize, 0);
-        Vector3[] pupilVerticesR = renderer.getCubeVertices(pupilRight, pupilSize, 0);
-        renderer.drawCubeShaded(pupilVerticesL, cam, new Color(0, 0, 0));
-        renderer.drawCubeShaded(pupilVerticesR, cam, new Color(0, 0, 0));
+        // Pata trasera izquierda (avanza con delantera derecha)
+        Vector3 backLeft = applyTransform(new Vector3(
+            -voxelSize,
+            -voxelSize * 0.5 + Math.abs(backLeftLeg) * 0.3,  // Ajustado
+            -voxelSize + backLeftLeg * 0.5
+        ));
+        backLeft = applyScaleToPosition(backLeft);
+        renderer.drawCubeShaded(renderer.getCubeVertices(backLeft, legSize, 0), cam, paw);
+        
+        // Pata trasera derecha (avanza con delantera izquierda)
+        Vector3 backRight = applyTransform(new Vector3(
+            voxelSize,
+            -voxelSize * 0.5 + Math.abs(backRightLeg) * 0.3,  // Ajustado
+            -voxelSize + backRightLeg * 0.5
+        ));
+        backRight = applyScaleToPosition(backRight);
+        renderer.drawCubeShaded(renderer.getCubeVertices(backRight, legSize, 0), cam, paw);
     }
 }

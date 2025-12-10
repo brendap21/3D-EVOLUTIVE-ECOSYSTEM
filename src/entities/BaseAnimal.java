@@ -8,16 +8,35 @@ import java.awt.Color;
 import java.util.Random;
 import java.util.ArrayList;
 import java.util.List;
+import entities.Collidable;
 
 /**
  * Clase base para todos los animales con animación de spawn compartida.
  */
-public abstract class BaseAnimal implements Renderable {
+public abstract class BaseAnimal implements Renderable, Collidable {
     protected Vector3 posicion;
     protected List<Vector3> voxels;
     protected int voxelSize;
     protected Color color;
     protected long seed;
+    protected Color originalColor;
+    protected int baseVoxelSize;
+    
+    // Growth phases
+    protected int growthPhase = 1; // 1, 2, 3
+    protected double phaseTimer = 0.0;
+    protected static final double PHASE_DURATION = 60.0; // seconds per phase before transition (1 minuto)
+    protected double transitionPulse = 0.0; // animation pulse when changing phase
+    
+    // Movement / wandering
+    protected Vector3 velocity = new Vector3(0, 0, 0);
+    protected double baseSpeed = 1.2;
+    protected double wanderTimer = 0.0;
+    protected static final double WANDER_CHANGE_INTERVAL = 3.5;
+    protected static final double WORLD_BOUND = 320.0;
+    protected static simulation.Mundo worldRef = null; // shared reference set from app
+    protected double yaw = 0.0; // rotación del animal hacia donde mira
+    protected boolean movementInitialized = false; // flag para inicializar el movimiento una sola vez
     
     // Selection and hover states
     private boolean isHovered = false;
@@ -64,6 +83,11 @@ public abstract class BaseAnimal implements Renderable {
         }
     }
     
+    /** Set a shared world reference so animals can consult collisions/terrain. */
+    public static void setWorld(simulation.Mundo world) {
+        worldRef = world;
+    }
+    
     @Override
     public void update() {
         if (isSpawning) {
@@ -74,6 +98,9 @@ public abstract class BaseAnimal implements Renderable {
                 spawnParticles.clear();
             }
         }
+
+        updateGrowthPhase();
+        updateMovement();
         
         // Animate hover glow
         if (isHovered) {
@@ -211,6 +238,126 @@ public abstract class BaseAnimal implements Renderable {
         );
     }
     
+    // Rotar un vector relativo alrededor del eje Y (yaw)
+    protected Vector3 rotateY(Vector3 v, double angle) {
+        double cos = Math.cos(angle);
+        double sin = Math.sin(angle);
+        return new Vector3(
+            v.x * cos - v.z * sin,
+            v.y,
+            v.x * sin + v.z * cos
+        );
+    }
+    
+    // Aplicar rotación y posición a un punto relativo
+    protected Vector3 applyTransform(Vector3 relativePos) {
+        // Ajustar yaw con -π/2 porque los modelos miran hacia +Z, pero velocity apunta en ángulo desde +X
+        Vector3 rotated = rotateY(relativePos, yaw - Math.PI / 2);
+        return new Vector3(
+            posicion.x + rotated.x,
+            posicion.y + rotated.y,
+            posicion.z + rotated.z
+        );
+    }
+
+    // --- Growth & movement helpers ---
+    protected double getPhaseScaleMultiplier() {
+        switch (growthPhase) {
+            case 2: return 1.35;
+            case 3: return 1.8;
+            default: return 1.0;
+        }
+    }
+
+    protected double getPhaseSpeedMultiplier() {
+        switch (growthPhase) {
+            case 2: return 1.25;
+            case 3: return 1.5;
+            default: return 1.0;
+        }
+    }
+
+    protected void updateGrowthPhase() {
+        if (isSpawning) return; // don't change during spawn
+        phaseTimer += 0.016;
+        if (phaseTimer >= PHASE_DURATION && growthPhase < 3) {
+            growthPhase++;
+            phaseTimer = 0.0;
+            transitionPulse = 1.0; // trigger animation pulse
+        }
+        if (transitionPulse > 0) {
+            transitionPulse = Math.max(0, transitionPulse - 0.04);
+        }
+        selectionScale = selectionScale * 0.98 + getPhaseScaleMultiplier() * 0.02;
+    }
+
+    protected void updateMovement() {
+        if (worldRef == null) return;
+        
+        // No mover si está seleccionado
+        if (isSelected) return;
+        
+        // Inicializar movimiento una sola vez después de spawn
+        if (!movementInitialized && !isSpawning) {
+            Random r = new Random(seed + System.nanoTime());
+            double angle = r.nextDouble() * Math.PI * 2;
+            double speed = baseSpeed * getPhaseSpeedMultiplier();
+            velocity = new Vector3(Math.cos(angle) * speed, 0, Math.sin(angle) * speed);
+            yaw = Math.atan2(velocity.z, velocity.x);
+            movementInitialized = true;
+        }
+        
+        if (!movementInitialized) return; // No mover durante spawn
+        
+        wanderTimer += 0.016;
+        if (wanderTimer > WANDER_CHANGE_INTERVAL) {
+            wanderTimer = 0.0;
+            Random r = new Random(seed + System.nanoTime());
+            double angle = r.nextDouble() * Math.PI * 2;
+            double speed = baseSpeed * getPhaseSpeedMultiplier();
+            velocity = new Vector3(Math.cos(angle) * speed, 0, Math.sin(angle) * speed);
+            yaw = Math.atan2(velocity.z, velocity.x);
+        }
+
+        Vector3 oldPos = posicion;
+        posicion = new Vector3(posicion.x + velocity.x * 0.5, posicion.y, posicion.z + velocity.z * 0.5);
+        
+        // Keep inside world bounds
+        if (Math.abs(posicion.x) > WORLD_BOUND || Math.abs(posicion.z) > WORLD_BOUND) {
+            posicion = oldPos;
+            // Invertir velocidad y yaw
+            velocity = new Vector3(-velocity.x, 0, -velocity.z);
+            yaw = Math.atan2(velocity.z, velocity.x);
+            return;
+        }
+
+        // Collisions
+        java.util.List<entities.Collidable> collidables = worldRef.getCollidables();
+        for (entities.Collidable c : collidables) {
+            if (c == this) continue;
+            if (c instanceof entities.Pasto) continue; // ignore grass
+            if (intersects(c)) {
+                posicion = oldPos;
+                // Girar 90 grados
+                double angle = Math.atan2(velocity.z, velocity.x) - Math.PI / 2;
+                double speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+                velocity = new Vector3(Math.cos(angle) * speed, 0, Math.sin(angle) * speed);
+                yaw = Math.atan2(velocity.z, velocity.x);
+                break;
+            }
+        }
+    }
+
+    protected boolean intersects(entities.Collidable other) {
+        Vector3 minA = getAABBMin();
+        Vector3 maxA = getAABBMax();
+        Vector3 minB = other.getAABBMin();
+        Vector3 maxB = other.getAABBMax();
+        return (minA.x <= maxB.x && maxA.x >= minB.x &&
+                minA.y <= maxB.y && maxA.y >= minB.y &&
+                minA.z <= maxB.z && maxA.z >= minB.z);
+    }
+    
     public Vector3 getPosicion() { return posicion; }
     
     public void setHovered(boolean hovered) { this.isHovered = hovered; }
@@ -223,6 +370,10 @@ public abstract class BaseAnimal implements Renderable {
     public double getSelectionScale() { return selectionScale; }
     
     public int getAnimalId() { return animalId; }
+    
+    public int getGrowthPhase() { return growthPhase; }
+    public double getPhaseTimer() { return phaseTimer; }
+    public String getSpeciesName() { return getClass().getSimpleName().replace("AnimalType", "Especie "); }
     
     // Get AABB for collision detection and selection
     public Vector3 getAABBMin() {

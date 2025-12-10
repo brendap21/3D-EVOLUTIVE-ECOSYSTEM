@@ -1,6 +1,5 @@
 package entities;
 
-import main.Renderable;
 import render.SoftwareRenderer;
 import math.Vector3;
 import math.Camera;
@@ -10,15 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AnimalType07: "Criatura Piramidal" (pyramidal creature)
- * Color: Verde oscuro, voxel mediano.
- * Forma: Base grande, se estrecha hacia arriba (pirámide).
- * Evolución: Se estira más, muta verdes más profundos.
+ * AnimalType07: Criatura insectoíde con mandíbulas y múltiples patas.
+ * Paleta fase 1 (3 colores): verde bosque, esmeralda, verde musgo.
+ * Fase 2-3 más segmentos, mandíbulas más grandes.
  */
 public class AnimalType07 extends BaseAnimal {
-    private double rotY = 0.0;
-    private double bob = 0.0;
-    private double speed = 1.1;
+    private double walkPhase = 0.0;
 
     public AnimalType07(Vector3 posicion, long seed) {
         this.posicion = posicion;
@@ -30,69 +26,110 @@ public class AnimalType07 extends BaseAnimal {
 
     private void generateFromSeed(long seed) {
         Random r = new Random(seed);
-        this.voxelSize = 8 + r.nextInt(4); // 3..5 pixels
-        
-        // Color: dark green
-        int rcol = 40 + r.nextInt(70);
-        int gcol = 80 + r.nextInt(100);
-        int bcol = 30 + r.nextInt(60);
-        this.color = new Color(rcol, gcol, bcol);
-        
-        this.speed = 0.9 + r.nextDouble() * 0.8;
+        this.voxelSize = 3 + r.nextInt(2);
+        this.baseVoxelSize = voxelSize;
+        Color[] palette = new Color[]{
+            new Color(40, 100, 50),
+            new Color(50, 180, 80),
+            new Color(60, 120, 60)
+        };
+        this.color = palette[r.nextInt(palette.length)];
+        this.originalColor = color;
+        this.baseSpeed = 1.3 + r.nextDouble() * 0.5;
 
-        // Ultra-simplified pyramid: 3 voxels
-        voxels.add(new Vector3(0, 0, 0));   // Base
-        voxels.add(new Vector3(0, 1, 0));   // Middle
-        voxels.add(new Vector3(0, 2, 0));   // Top
-    }
+        // Cuerpo segmentado
+        voxels.add(new Vector3(0, 0, 0));
+        voxels.add(new Vector3(0, 0, 1));
+        voxels.add(new Vector3(0, 0, -1));
 
-    public void mutate(long newSeed) {
-        Random r = new Random(newSeed);
-        // Shift to deeper greens
-        int r1 = Math.max(0, color.getRed() - r.nextInt(40));
-        int g1 = Math.min(255, color.getGreen() + r.nextInt(40));
-        int b1 = Math.max(0, color.getBlue() - r.nextInt(30));
-        this.color = new Color(r1, g1, b1);
-        
-        // Possibly grow taller
-        if (r.nextDouble() < 0.3 && voxels.size() < 16) {
-            voxels.add(new Vector3(0, 3, 0));
-        }
-    }
+        // Cabeza
+        voxels.add(new Vector3(0, 0, 2));
 
-    public Vector3 getAABBMin() {
-        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            minX = Math.min(minX, v.x * voxelSize);
-            minY = Math.min(minY, v.y * voxelSize);
-            minZ = Math.min(minZ, v.z * voxelSize);
-        }
-        return new Vector3(posicion.x + minX, posicion.y + minY, posicion.z + minZ);
-    }
-
-    public Vector3 getAABBMax() {
-        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            maxX = Math.max(maxX, (v.x + 1) * voxelSize);
-            maxY = Math.max(maxY, (v.y + 1) * voxelSize);
-            maxZ = Math.max(maxZ, (v.z + 1) * voxelSize);
-        }
-        return new Vector3(posicion.x + maxX, posicion.y + maxY, posicion.z + maxZ);
+        // Patas (6 patas insectoídeas)
+        voxels.add(new Vector3(-1, -1, 1));
+        voxels.add(new Vector3(1, -1, 1));
+        voxels.add(new Vector3(-1, -1, 0));
+        voxels.add(new Vector3(1, -1, 0));
+        voxels.add(new Vector3(-1, -1, -1));
+        voxels.add(new Vector3(1, -1, -1));
     }
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        Color glowColor = applyGlowToColor(color);
-        for (Vector3 voxel : voxels) {
-            Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize
-            );
-            worldPos = applyScaleToPosition(worldPos);
-            int scaledSize = applyScaleToSize(voxelSize);
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
-            renderer.drawCubeShaded(vertices, cam, glowColor);
+        walkPhase += 0.18 * getPhaseSpeedMultiplier();
+        Color body = applyGlowToColor(originalColor);
+
+        // Cuerpo base
+        for (Vector3 v : voxels) {
+            Vector3 wp = applyTransform(new Vector3(v.x * voxelSize, v.y * voxelSize, v.z * voxelSize));
+            wp = applyScaleToPosition(wp);
+            int s = applyScaleToSize(voxelSize);
+            renderer.drawCubeShaded(renderer.getCubeVertices(wp, s, 0), cam, body);
         }
+
+        // Mandíbulas (más grandes en fases avanzadas)
+        int mandibleSize = applyScaleToSize((int)(voxelSize * (0.6 + growthPhase * 0.2)));
+        double mandOpen = Math.sin(walkPhase * 2) * voxelSize * 0.3;
+        Vector3 mandL = applyTransform(new Vector3(-voxelSize * 0.6 - mandOpen, -voxelSize * 0.2, voxelSize * 2.5));
+        mandL = applyScaleToPosition(mandL);
+        Vector3 mandR = applyTransform(new Vector3(voxelSize * 0.6 + mandOpen, -voxelSize * 0.2, voxelSize * 2.5));
+        mandR = applyScaleToPosition(mandR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(mandL, mandibleSize, 0), cam, body.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(mandR, mandibleSize, 0), cam, body.darker());
+
+        // Ojos compuestos
+        int eyeSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.35)));
+        Color eyeColor = new Color(200, 50, 50);
+        Vector3 eyeL = applyTransform(new Vector3(-voxelSize * 0.6, voxelSize * 0.3, voxelSize * 2.2));
+        eyeL = applyScaleToPosition(eyeL);
+        Vector3 eyeR = applyTransform(new Vector3(voxelSize * 0.6, voxelSize * 0.3, voxelSize * 2.2));
+        eyeR = applyScaleToPosition(eyeR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeL, eyeSize, 0), cam, eyeColor);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeR, eyeSize, 0), cam, eyeColor);
+
+        // Antenas
+        int antennaLen = 1 + growthPhase;
+        int antennaSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.3)));
+        for (int i = 0; i < antennaLen; i++) {
+            double bend = Math.sin(walkPhase + i * 0.7) * voxelSize * 0.2;
+            Vector3 antL = applyTransform(new Vector3(-voxelSize * 0.4 + bend, voxelSize * (0.8 + i * 0.6), voxelSize * 2.3));
+            antL = applyScaleToPosition(antL);
+            Vector3 antR = applyTransform(new Vector3(voxelSize * 0.4 - bend, voxelSize * (0.8 + i * 0.6), voxelSize * 2.3));
+            antR = applyScaleToPosition(antR);
+            renderer.drawCubeShaded(renderer.getCubeVertices(antL, antennaSize, 0), cam, body.brighter());
+            renderer.drawCubeShaded(renderer.getCubeVertices(antR, antennaSize, 0), cam, body.brighter());
+        }
+
+        // 6 patas con movimiento alternado tipo insecto
+        int legSize = applyScaleToSize((int)(voxelSize * 0.7));
+        Color paw = body.darker();
+        
+        // Tripod gait - 3 patas en contacto siempre
+        double leg1 = Math.sin(walkPhase) * voxelSize * 0.3;
+        double leg2 = Math.sin(walkPhase + Math.PI) * voxelSize * 0.3;
+        
+        Vector3 l1 = applyTransform(new Vector3(-voxelSize * 1.2, -voxelSize * 0.5 + Math.abs(leg1) * 0.2, voxelSize + leg1 * 0.5));
+        l1 = applyScaleToPosition(l1);
+        renderer.drawCubeShaded(renderer.getCubeVertices(l1, legSize, 0), cam, paw);
+        Vector3 l2 = applyTransform(new Vector3(voxelSize * 1.2, -voxelSize * 0.5 + Math.abs(leg2) * 0.2, voxelSize + leg2 * 0.5));
+        l2 = applyScaleToPosition(l2);
+        renderer.drawCubeShaded(renderer.getCubeVertices(l2, legSize, 0), cam, paw);
+        Vector3 l3 = applyTransform(new Vector3(-voxelSize * 1.2, -voxelSize * 0.5 + Math.abs(leg2) * 0.2, leg2 * 0.5));
+        l3 = applyScaleToPosition(l3);
+        renderer.drawCubeShaded(renderer.getCubeVertices(l3, legSize, 0), cam, paw);
+        Vector3 l4 = applyTransform(new Vector3(voxelSize * 1.2, -voxelSize * 0.5 + Math.abs(leg1) * 0.2, leg1 * 0.5));
+        l4 = applyScaleToPosition(l4);
+        renderer.drawCubeShaded(renderer.getCubeVertices(l4, legSize, 0), cam, paw);
+        Vector3 l5 = applyTransform(new Vector3(-voxelSize * 1.2, -voxelSize * 0.5 + Math.abs(leg1) * 0.2, -voxelSize + leg1 * 0.5));
+        l5 = applyScaleToPosition(l5);
+        renderer.drawCubeShaded(renderer.getCubeVertices(l5, legSize, 0), cam, paw);
+        Vector3 l6 = applyTransform(new Vector3(voxelSize * 1.2, -voxelSize * 0.5 + Math.abs(leg2) * 0.2, -voxelSize + leg2 * 0.5));
+        l6 = applyScaleToPosition(l6);
+        renderer.drawCubeShaded(renderer.getCubeVertices(l6, legSize, 0), cam, paw);
+    }
+
+    @Override
+    public String getSpeciesName() {
+        return "Escarabajo Esmeralda";
     }
 }

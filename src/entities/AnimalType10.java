@@ -1,6 +1,5 @@
 package entities;
 
-import main.Renderable;
 import render.SoftwareRenderer;
 import math.Vector3;
 import math.Camera;
@@ -10,15 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AnimalType10: "Criatura Fractal" (fractal creature)
- * Color: Negro-gris, voxel fino, estructura fractal.
- * Forma: Repetición de patrones en múltiples escalas.
- * Evolución: Aumenta complejidad fractal, tonos más claros.
+ * AnimalType10: Criatura nocturna con alas membranosas.
+ * Paleta fase 1 (3 colores): gris oscuro, plata, carbón.
+ * Fase 2-3 alas más grandes, movimiento más ágil.
  */
 public class AnimalType10 extends BaseAnimal {
-    private double rotY = 0.0;
-    private double bob = 0.0;
-    private double speed = 1.0;
+    private double flapPhase = 0.0;
 
     public AnimalType10(Vector3 posicion, long seed) {
         this.posicion = posicion;
@@ -30,72 +26,110 @@ public class AnimalType10 extends BaseAnimal {
 
     private void generateFromSeed(long seed) {
         Random r = new Random(seed);
-        this.voxelSize = 8 + r.nextInt(4); // 3..4 pixels
-        
-        // Color: dark gray
-        int rcol = 50 + r.nextInt(80);
-        int gcol = 50 + r.nextInt(80);
-        int bcol = 50 + r.nextInt(80);
-        this.color = new Color(rcol, gcol, bcol);
-        
-        this.speed = 0.8 + r.nextDouble() * 0.8;
+        this.voxelSize = 3 + r.nextInt(2);
+        this.baseVoxelSize = voxelSize;
+        Color[] palette = new Color[]{
+            new Color(70, 70, 80),
+            new Color(140, 140, 150),
+            new Color(50, 50, 55)
+        };
+        this.color = palette[r.nextInt(palette.length)];
+        this.originalColor = color;
+        this.baseSpeed = 1.5 + r.nextDouble() * 0.7;
 
-        // Ultra-simplified fractal: 3 voxels
-        voxels.add(new Vector3(0, 0, 0));   // Center
-        voxels.add(new Vector3(1, 0, 0));   // Right
-        voxels.add(new Vector3(0, 0, 1));   // Forward
-    }
+        // Cuerpo pequeño
+        voxels.add(new Vector3(0, 0, 0));
+        voxels.add(new Vector3(0, 1, 0));
 
-    public void mutate(long newSeed) {
-        Random r = new Random(newSeed);
-        // Lighten gray
-        int r1 = Math.min(255, color.getRed() + r.nextInt(60) - 20);
-        int g1 = Math.min(255, color.getGreen() + r.nextInt(60) - 20);
-        int b1 = Math.min(255, color.getBlue() + r.nextInt(60) - 20);
-        this.color = new Color(r1, g1, b1);
-        
-        // Add more fractal levels
-        if (r.nextDouble() < 0.4 && voxels.size() < 20) {
-            int x = -3 + r.nextInt(7);
-            int y = -1 + r.nextInt(3);
-            int z = -3 + r.nextInt(7);
-            voxels.add(new Vector3(x, y, z));
-        }
-    }
+        // Cabeza
+        voxels.add(new Vector3(0, 1, 1));
 
-    public Vector3 getAABBMin() {
-        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            minX = Math.min(minX, v.x * voxelSize);
-            minY = Math.min(minY, v.y * voxelSize);
-            minZ = Math.min(minZ, v.z * voxelSize);
-        }
-        return new Vector3(posicion.x + minX, posicion.y + minY, posicion.z + minZ);
-    }
-
-    public Vector3 getAABBMax() {
-        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
-        for (Vector3 v : voxels) {
-            maxX = Math.max(maxX, (v.x + 1) * voxelSize);
-            maxY = Math.max(maxY, (v.y + 1) * voxelSize);
-            maxZ = Math.max(maxZ, (v.z + 1) * voxelSize);
-        }
-        return new Vector3(posicion.x + maxX, posicion.y + maxY, posicion.z + maxZ);
+        // Patas
+        voxels.add(new Vector3(-1, -1, 0));
+        voxels.add(new Vector3(1, -1, 0));
     }
 
     @Override
     protected void renderNormal(SoftwareRenderer renderer, Camera cam) {
-        Color glowColor = applyGlowToColor(color);
-        for (Vector3 voxel : voxels) {
-            Vector3 worldPos = new Vector3(
-                posicion.x + voxel.x * voxelSize,
-                posicion.y + voxel.y * voxelSize,
-                posicion.z + voxel.z * voxelSize
-            );
-            worldPos = applyScaleToPosition(worldPos);
-            int scaledSize = applyScaleToSize(voxelSize);
-            Vector3[] vertices = renderer.getCubeVertices(worldPos, scaledSize, 0);
-            renderer.drawCubeShaded(vertices, cam, glowColor);
+        flapPhase += 0.28 * getPhaseSpeedMultiplier();
+        Color body = applyGlowToColor(originalColor);
+
+        // Cuerpo base
+        for (Vector3 v : voxels) {
+            Vector3 wp = applyTransform(new Vector3(v.x * voxelSize, v.y * voxelSize, v.z * voxelSize));
+            wp = applyScaleToPosition(wp);
+            int s = applyScaleToSize(voxelSize);
+            renderer.drawCubeShaded(renderer.getCubeVertices(wp, s, 0), cam, body);
         }
+
+        // Alas membranosas (más grandes en fases avanzadas)
+        int wingSpan = 2 + growthPhase;
+        int wingSize = applyScaleToSize((int)(voxelSize * 0.5));
+        double wingFlap = Math.sin(flapPhase * 2) * voxelSize * 0.8;
+        Color wingColor = new Color(
+            Math.max(0, body.getRed() - 30),
+            Math.max(0, body.getGreen() - 30),
+            Math.max(0, body.getBlue() - 20)
+        );
+        
+        for (int i = 0; i < wingSpan; i++) {
+            double wingY = voxelSize * (1.0 - i * 0.3) + wingFlap;
+            Vector3 wingL = applyTransform(new Vector3(-voxelSize * (1.2 + i * 0.7), wingY, 0));
+            wingL = applyScaleToPosition(wingL);
+            Vector3 wingR = applyTransform(new Vector3(voxelSize * (1.2 + i * 0.7), wingY, 0));
+            wingR = applyScaleToPosition(wingR);
+            renderer.drawCubeShaded(renderer.getCubeVertices(wingL, wingSize, 0), cam, wingColor);
+            renderer.drawCubeShaded(renderer.getCubeVertices(wingR, wingSize, 0), cam, wingColor);
+        }
+
+        // Orejas puntiagudas
+        int earSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.4)));
+        Vector3 earL = applyTransform(new Vector3(-voxelSize * 0.5, voxelSize * 2.0, voxelSize * 0.8));
+        earL = applyScaleToPosition(earL);
+        Vector3 earR = applyTransform(new Vector3(voxelSize * 0.5, voxelSize * 2.0, voxelSize * 0.8));
+        earR = applyScaleToPosition(earR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(earL, earSize, 0), cam, body.darker());
+        renderer.drawCubeShaded(renderer.getCubeVertices(earR, earSize, 0), cam, body.darker());
+
+        // Ojos brillantes
+        int eyeSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.35)));
+        Color eyeGlow = new Color(255, 200, 100);
+        Color pupil = new Color(20, 20, 30);
+        Vector3 eyeL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 1.5, voxelSize * 1.3));
+        eyeL = applyScaleToPosition(eyeL);
+        Vector3 eyeR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 1.5, voxelSize * 1.3));
+        eyeR = applyScaleToPosition(eyeR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeL, eyeSize, 0), cam, eyeGlow);
+        renderer.drawCubeShaded(renderer.getCubeVertices(eyeR, eyeSize, 0), cam, eyeGlow);
+        int pup = Math.max(1, eyeSize / 2);
+        Vector3 pupilL = applyTransform(new Vector3(-voxelSize * 0.4, voxelSize * 1.5, voxelSize * 1.3 + pup));
+        pupilL = applyScaleToPosition(pupilL);
+        Vector3 pupilR = applyTransform(new Vector3(voxelSize * 0.4, voxelSize * 1.5, voxelSize * 1.3 + pup));
+        pupilR = applyScaleToPosition(pupilR);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilL, pup, 0), cam, pupil);
+        renderer.drawCubeShaded(renderer.getCubeVertices(pupilR, pup, 0), cam, pupil);
+
+        // Boca pequeña
+        int mouthSize = Math.max(1, applyScaleToSize((int)(voxelSize * 0.2)));
+        Vector3 mouth = applyTransform(new Vector3(0, voxelSize * 1.2, voxelSize * 1.5));
+        mouth = applyScaleToPosition(mouth);
+        renderer.drawCubeShaded(renderer.getCubeVertices(mouth, mouthSize, 0), cam, new Color(40, 40, 50));
+
+        // Patas con garras
+        int legSize = applyScaleToSize((int)(voxelSize * 0.6));
+        Color claw = body.darker();
+        double legPhase = Math.sin(flapPhase) * voxelSize * 0.2;
+        
+        Vector3 leg1 = applyTransform(new Vector3(-voxelSize * 0.5, -voxelSize * 0.5 + Math.abs(legPhase) * 0.2, legPhase * 0.3));
+        leg1 = applyScaleToPosition(leg1);
+        Vector3 leg2 = applyTransform(new Vector3(voxelSize * 0.5, -voxelSize * 0.5 - Math.abs(legPhase) * 0.2, -legPhase * 0.3));
+        leg2 = applyScaleToPosition(leg2);
+        renderer.drawCubeShaded(renderer.getCubeVertices(leg1, legSize, 0), cam, claw);
+        renderer.drawCubeShaded(renderer.getCubeVertices(leg2, legSize, 0), cam, claw);
+    }
+
+    @Override
+    public String getSpeciesName() {
+        return "Murciélago Nocturno";
     }
 }
