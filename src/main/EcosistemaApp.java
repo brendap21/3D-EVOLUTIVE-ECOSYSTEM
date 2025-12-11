@@ -74,11 +74,15 @@ public class EcosistemaApp {
         // Este panel contiene el backBuffer donde se dibuja píxel por píxel
         // Implementa DOBLE BUFFER para evitar parpadeo (flickering)
         RenderPanel panel = new RenderPanel(ancho, alto);
-
+        
+        // CREAR PANEL DE VISUALIZACIÓN
+        // DisplayPanel: Solo muestra la imagen renderizada, sin dibujar contenido
+        DisplayPanel displayPanel = new DisplayPanel(ancho, alto);
+        
         // CREAR VENTANA (JFrame)
         JFrame frame = new JFrame("3D EVOLUTIVE ECOSYSTEM");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.add(panel);
+        frame.add(displayPanel);
         frame.pack(); // Ajusta tamaño al panel
         frame.setLocationRelativeTo(null); // Centra en pantalla
         frame.setVisible(true);
@@ -111,7 +115,9 @@ public class EcosistemaApp {
         spawnEnvironmentalEntities(mundo);
         
         // CREAR SISTEMA DE CONTROLES (input handling estilo FPS)
-        Controles controles = new Controles(cam, panel);
+        // Usar displayPanel como componente de referencia para que las coordenadas
+        // de mouse estén alineadas con el framebuffer mostrado.
+        Controles controles = new Controles(cam, displayPanel);
         
         // CONECTAR CONTROLES CON EL MUNDO
         // setMundoAndCorrectPosition ajusta la posición de la cámara para que esté
@@ -119,20 +125,20 @@ public class EcosistemaApp {
         controles.setMundoAndCorrectPosition(mundo);
         panel.setMundo(mundo);
         panel.setCamera(cam);
-        panel.setParentFrame(frame);
         
         // REGISTRAR LISTENERS DE INPUT
         // MouseMotionListener: captura movimiento del mouse para rotar cámara (yaw/pitch)
         // KeyListener: captura WASD, espacio, ctrl para mover cámara
-        panel.addMouseMotionListener(controles);
-        panel.addKeyListener(controles);
-        panel.setFocusable(true); // Necesario para recibir eventos de teclado
-        panel.requestFocus();
+        // Listeners: mouse sobre el DisplayPanel para obtener coordenadas correctas
+        displayPanel.addMouseMotionListener(controles);
+        displayPanel.addKeyListener(controles);
+        displayPanel.setFocusable(true); // Necesario para recibir eventos de teclado
+        displayPanel.requestFocusInWindow();
 
         // LISTENER DE MOUSE CLICK
         // Cuando está pausado, detecta clicks en botones del menú de pausa
         // Cuando no está pausado, permite seleccionar animales haciendo click
-        panel.addMouseListener(new java.awt.event.MouseAdapter(){
+        displayPanel.addMouseListener(new java.awt.event.MouseAdapter(){
             @Override
             public void mousePressed(java.awt.event.MouseEvent e){
                 panel.handleMousePressed(e, controles);
@@ -140,7 +146,7 @@ public class EcosistemaApp {
         });
         
         // LISTENER DE TECLAS (ESC para cerrar panel de animales)
-        panel.addKeyListener(new java.awt.event.KeyAdapter(){
+        displayPanel.addKeyListener(new java.awt.event.KeyAdapter(){
             @Override
             public void keyPressed(java.awt.event.KeyEvent e){
                 panel.handleKeyPressed(e, controles);
@@ -156,7 +162,7 @@ public class EcosistemaApp {
         // INICIAR HILO DE RENDERIZADO
         // Actualiza y dibuja la escena ~143 veces por segundo (7ms sleep)
         // Aplica transformaciones 3D, proyección, z-buffer, rasterización
-        RenderThread hilo = new RenderThread(panel, mundo, cam, controles);
+        RenderThread hilo = new RenderThread(panel, mundo, cam, controles, displayPanel);
         hilo.start();
 
         // INICIAR HILO DE SIMULACIÓN

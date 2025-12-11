@@ -1,8 +1,6 @@
 package main;
 
 import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Graphics;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -10,10 +8,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import javax.swing.JPanel;
-import javax.swing.JFrame;
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
 import entities.BaseAnimal;
 import entities.Collidable;
 import math.Camera;
@@ -27,10 +21,11 @@ import ui.SaveGameDialog;
 import ui.LoadGameDialog;
 
 /**
- * RenderPanel: panel principal de renderizado + HUD/spawn menu.
- * Recreado para restaurar la UI de spawner y el indicador de colocacion.
+ * RenderPanel: Renderizador 3D puro. No hereda de JPanel.
+ * Todo el renderizado es píxel a píxel sin usar librerías gráficas.
+ * Solo usa BufferedImage.setRGB() para dibujar.
  */
-public class RenderPanel extends JPanel {
+public class RenderPanel {
     private final SoftwareRenderer renderer;
     private final int ancho;
     private final int alto;
@@ -108,14 +103,11 @@ public class RenderPanel extends JPanel {
     // Referencias para guardar/cargar
     private Camera camera = null;
     private simulation.Simulador simulador = null;
-    private JFrame parentFrame = null;
 
     public RenderPanel(int ancho, int alto) {
         this.ancho = ancho;
         this.alto = alto;
         this.renderer = new SoftwareRenderer(ancho, alto);
-        setPreferredSize(new Dimension(ancho, alto));
-        setFocusable(true);
     }
 
     public void setMundo(Mundo m) {
@@ -128,10 +120,6 @@ public class RenderPanel extends JPanel {
     
     public void setSimulador(simulation.Simulador sim) {
         this.simulador = sim;
-    }
-    
-    public void setParentFrame(JFrame frame) {
-        this.parentFrame = frame;
     }
 
     public void render(List<Renderable> entidades, Camera cam, Controles controles) {
@@ -187,16 +175,10 @@ public class RenderPanel extends JPanel {
         drawHUD(controles, menu, cam);
 
         renderer.swapBuffers();
-        repaint();
     }
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        BufferedImage img = renderer.getBuffer();
-        if (img != null) {
-            g.drawImage(img, 0, 0, getWidth(), getHeight(), null);
-        }
+    public BufferedImage getRenderedImage() {
+        return renderer.getBuffer();
     }
 
     private void drawHUD(Controles controles, AnimalSpawnerMenu menu, Camera cam) {
@@ -527,11 +509,15 @@ public class RenderPanel extends JPanel {
         int mx = e.getX();
         int my = e.getY();
         
+        // Detectar botones del mouse sin SwingUtilities
+        boolean isLeftButton = (e.getButton() == MouseEvent.BUTTON1);
+        boolean isRightButton = (e.getButton() == MouseEvent.BUTTON3);
+        
         // Handle animal info panel clicks first
         if (selectedAnimal != null && selectedAnimal instanceof entities.BaseAnimal) {
             entities.BaseAnimal ba = (entities.BaseAnimal) selectedAnimal;
             
-            if (SwingUtilities.isLeftMouseButton(e)) {
+            if (isLeftButton) {
                 // Check for delete button
                 if (deleteAnimalButton != null && deleteAnimalButton.contains(mx, my)) {
                     if (mundo != null) {
@@ -607,7 +593,7 @@ public class RenderPanel extends JPanel {
             }
         } else if (selectedAnimal != null && selectedAnimal instanceof entities.Depredador) {
             // Handle depredador panel clicks
-            if (SwingUtilities.isLeftMouseButton(e)) {
+            if (isLeftButton) {
                 entities.Depredador dep = (entities.Depredador) selectedAnimal;
                 
                 // Button dimensions for depredador - DEBE SER IDÉNTICO A drawDepredadorInfoPanel()
@@ -658,7 +644,7 @@ public class RenderPanel extends JPanel {
         
         // Handle pause menu clicks
         if (controles.isPaused()) {
-            if (SwingUtilities.isLeftMouseButton(e)) {
+            if (isLeftButton) {
                 for (ButtonBounds btn : pauseMenuButtons) {
                     if (btn.contains(mx, my)) {
                         handlePauseMenuAction(btn.action, controles);
@@ -673,7 +659,7 @@ public class RenderPanel extends JPanel {
         if (menu == null) return;
 
         if (menu.isOpen()) {
-            if (SwingUtilities.isLeftMouseButton(e)) {
+            if (isLeftButton) {
                 for (MenuItemBounds b : lastMenuBounds) {
                     if (b.contains(mx, my)) {
                         int current = menu.getSelectedIndex();
@@ -693,14 +679,14 @@ public class RenderPanel extends JPanel {
         }
 
         if (menu.isWaitingForPosition()) {
-            if (SwingUtilities.isRightMouseButton(e)) {
+            if (isRightButton) {
                 attemptSpawn(controles);
             }
             return;
         }
         
         // Handle animal selection with right click
-        if (SwingUtilities.isRightMouseButton(e)) {
+        if (isRightButton) {
             if (animalPanelActive) {
                 // If panel is active, this closes it
                 if (selectedAnimal != null) {
@@ -786,13 +772,13 @@ public class RenderPanel extends JPanel {
     }
     
     private void handleSaveGame(Controles controles) {
-        if (mundo == null || camera == null || parentFrame == null) {
-            JOptionPane.showMessageDialog(parentFrame, "Error: Falta información para guardar", "Error", JOptionPane.ERROR_MESSAGE);
+        if (mundo == null || camera == null) {
+            setTransientMessage("Error: Falta informacion", new Color(255, 100, 50), 2000);
             return;
         }
         
         // Mostrar diálogo de guardado
-        java.io.File saveFile = SaveGameDialog.showSaveDialog(parentFrame);
+        java.io.File saveFile = SaveGameDialog.showSaveDialog(null);
         if (saveFile == null) {
             return; // Usuario canceló
         }
@@ -809,20 +795,20 @@ public class RenderPanel extends JPanel {
         
         // Guardar
         if (simulation.Persistencia.saveGameState(saveFile, state)) {
-            JOptionPane.showMessageDialog(parentFrame, "Partida guardada: " + saveFile.getName(), "Guardado", JOptionPane.INFORMATION_MESSAGE);
+            setTransientMessage("Partida guardada: " + saveFile.getName(), new Color(100, 200, 150), 3000);
         } else {
-            JOptionPane.showMessageDialog(parentFrame, "Error al guardar la partida", "Error", JOptionPane.ERROR_MESSAGE);
+            setTransientMessage("Error al guardar partida", new Color(255, 100, 50), 2000);
         }
     }
     
     private void handleLoadGame(Controles controles) {
-        if (mundo == null || camera == null || parentFrame == null) {
-            JOptionPane.showMessageDialog(parentFrame, "Error: Falta información para cargar", "Error", JOptionPane.ERROR_MESSAGE);
+        if (mundo == null || camera == null) {
+            setTransientMessage("Error: Falta informacion", new Color(255, 100, 50), 2000);
             return;
         }
         
         // Mostrar diálogo de carga
-        java.io.File loadFile = LoadGameDialog.showLoadDialog(parentFrame);
+        java.io.File loadFile = LoadGameDialog.showLoadDialog(null);
         if (loadFile == null) {
             return; // Usuario canceló
         }
@@ -862,7 +848,7 @@ public class RenderPanel extends JPanel {
         // Reanudar simulación
         controles.setPaused(false);
         
-        JOptionPane.showMessageDialog(parentFrame, "Partida cargada: " + loadFile.getName() + "\n" + state.animals.size() + " animales restaurados", "Cargado", JOptionPane.INFORMATION_MESSAGE);
+        setTransientMessage("Partida cargada: " + loadFile.getName(), new Color(100, 200, 150), 3000);
     }
 
     private void attemptSpawn(Controles controles) {

@@ -3,6 +3,7 @@ package main;
 import math.Camera;
 import java.util.Collections;
 import java.util.List;
+import java.awt.image.BufferedImage;
 import simulation.Mundo;
 import ui.Controles;
 
@@ -49,10 +50,11 @@ import ui.Controles;
  */
 public class RenderThread extends Thread {
     // Referencias a los componentes principales del sistema
-    private RenderPanel panel;     // Panel donde se dibuja (contiene el backBuffer)
-    private Mundo mundo;           // Contenedor de todas las entidades
-    private Camera cam;            // Cámara 3D (posición + orientación)
-    private Controles controles;   // Sistema de input (teclado + mouse)
+    private RenderPanel panel;        // Panel donde se dibuja (contiene el backBuffer)
+    private Mundo mundo;              // Contenedor de todas las entidades
+    private Camera cam;               // Cámara 3D (posición + orientación)
+    private Controles controles;      // Sistema de input (teclado + mouse)
+    private DisplayPanel displayPanel; // Panel para mostrar imagen
 
     /**
      * Constructor: Inicializa el hilo de renderizado con referencias a componentes.
@@ -61,12 +63,14 @@ public class RenderThread extends Thread {
      * @param mundo Mundo con todas las entidades a dibujar
      * @param cam Cámara 3D (define punto de vista)
      * @param controles Sistema de controles (para actualizar posición/orientación cámara)
+     * @param displayPanel Panel para mostrar la imagen renderizada
      */
-    public RenderThread(RenderPanel panel, Mundo mundo, Camera cam, Controles controles){
+    public RenderThread(RenderPanel panel, Mundo mundo, Camera cam, Controles controles, DisplayPanel displayPanel){
         this.panel = panel;
         this.mundo = mundo;
         this.cam = cam;
         this.controles = controles;
+        this.displayPanel = displayPanel;
     }
 
     /**
@@ -130,6 +134,14 @@ public class RenderThread extends Thread {
             // 3. Dibujar HUD (estadísticas, crosshair, menús)
             // 4. Swap buffers (mostrar backBuffer en pantalla)
             panel.render(snapshot, cam, controles);
+            
+            // MOSTRAR IMAGEN EN PANTALLA
+            // Actualizar el DisplayPanel con la imagen renderizada
+            BufferedImage img = panel.getRenderedImage();
+            if (img != null && displayPanel != null) {
+                displayPanel.setImage(img);
+                displayPanel.repaint();
+            }
 
             // LIMITAR FRAMERATE
             // Sleep de 7ms = ~143 FPS máximo
