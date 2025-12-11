@@ -1,9 +1,7 @@
 # 3D EVOLUTIVE ECOSYSTEM
 
 ## Descripción
-3D EVOLUTIVE ECOSYSTEM es un  Simulador/mini-juego 3D donde animales voxel (cubos) evolucionan proceduralmente (color, tamaño, velocidad, comportamiento). El jugador puede interactuar (añadir / alimentar / eliminar), ajustar parámetros en tiempo real, guardar/cargar partidas y recorrer el mundo con cámara libre. Todo renderizado por software — solo usar operaciones por píxel (BufferedImage.setRGB/putPixel) y un JPanel para mostrar el BufferedImage.
-
-Este proyecto es parte de la materia Gráficas por Computadora 2D y 3D y sirve como base para experimentar con transformaciones, proyecciones, animación determinista y manejo de hilos en Java.
+3D EVOLUTIVE ECOSYSTEM es un  Simulador/mini-juego 3D donde animales voxel (cubos) evolucionan proceduralmente (color, tamaño, velocidad, comportamiento). El jugador puede interactuar (añadir / alimentar / eliminar), ajustar parámetros en tiempo real, guardar/cargar partidas y recorrer el mundo con cámara libre. Todo renderizado por software — solo usa operaciones por píxel (BufferedImage.setRGB/putPixel) y un JPanel para mostrar el BufferedImage.
 
 ## Características
 
