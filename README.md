@@ -41,6 +41,9 @@ ESC        | Abrir menú de pausa
 ## Interacción con entidades:
 -	Click derecho: Displaya un menú lateral con la información del animal/depredador (id, especie, tiempo de generación, etapa de evolucion, tiempo restante para próxima evolución y controladorees que permiten avanzar directamente a una evolución o retroceder si lo permite, además de un botón que permit eliminar dicha entidad).
 
+## Guardado/Carga: 
+- Dialoq que permite elegir la ubicación del archivo, nombrarlo y seleccionarlo para guardar o cargar la partida. El archivo genera una lista de entidades con todos sus atributos y RNG seed, parámetros del mundo y tiempo transcurrido (para continuar exactamente como se dejó).
+
 ## Compilación y Ejecución
 
 Desde la consola, en la raíz del proyecto:
