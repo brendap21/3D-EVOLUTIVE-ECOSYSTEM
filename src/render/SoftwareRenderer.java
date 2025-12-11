@@ -90,48 +90,163 @@ public class SoftwareRenderer {
         return result;
     }
 
-    // ---------------- Generadores públicos de mallas (usados por entidades) ----------------
-    // Public helpers so entities can request vertex arrays for cubes/cylinders.
+    // ============================================================================================
+    // GENERADORES DE PRIMITIVAS 3D (CUBOS Y CILINDROS)
+    // ============================================================================================
+    // Métodos públicos para que las entidades generen arreglos de vértices de primitivas 3D.
+    // Estas primitivas son requisitos del proyecto.
+    
+    /**
+     * ========================================================================================
+     * getCubeVertices - Genera los 8 vértices de un CUBO (PRIMITIVA 3D)
+     * ========================================================================================
+     * 
+     * GEOMETRÍA DEL CUBO:
+     * - 8 vértices (esquinas)
+     * - 12 aristas
+     * - 6 caras cuadradas
+     * - Cada cara se renderiza como 2 triángulos → 12 triángulos totales
+     * 
+     * TOPOLOGÍA DE VÉRTICES:
+     *        v3 -------- v2
+     *       /|          /|
+     *      / |         / |      Y
+     *     v7 -------- v6 |      |
+     *     |  v0 ------|--v1     +-- X
+     *     | /         | /      /
+     *     |/          |/      Z
+     *     v4 -------- v5
+     * 
+     * TRANSFORMACIONES APLICADAS:
+     * 1. ESCALA: tam/2 define distancia del centro a cara
+     * 2. ROTACIÓN: rotY rota alrededor del eje Y usando matriz 2D:
+     *    x' = x*cos(θ) - z*sin(θ)
+     *    z' = x*sin(θ) + z*cos(θ)
+     * 3. TRASLACIÓN: pos desplaza el cubo en el mundo
+     * 
+     * @param pos Centro del cubo en world space
+     * @param tam Longitud de cada arista
+     * @param rotY Ángulo de rotación en radianes alrededor del eje Y
+     * @return Array de 8 vértices en world space
+     */
     public Vector3[] getCubeVertices(Vector3 pos, int tam, double rotY){
         double half = tam / 2.0;
         Vector3[] vertices = new Vector3[8];
+        
+        // Offsets locales (coordenadas relativas al centro)
         double[][] offsets = {
-            {-half,-half,-half},{half,-half,-half},{half,half,-half},{-half,half,-half},
-            {-half,-half,half},{half,-half,half},{half,half,half},{-half,half,half}
+            {-half,-half,-half},{half,-half,-half},{half,half,-half},{-half,half,-half}, // Front face
+            {-half,-half,half},{half,-half,half},{half,half,half},{-half,half,half}      // Back face
         };
+        
+        // Pre-calcular seno y coseno (optimización)
         double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        
+        // Aplicar transformaciones: ROTACIÓN Y + TRASLACIÓN
         for(int i=0;i<8;i++){
             double x = offsets[i][0], y = offsets[i][1], z = offsets[i][2];
+            
+            // ROTACIÓN alrededor de Y (matriz 2x2 en el plano XZ)
             double xr = x * cos - z * sin;
             double zr = x * sin + z * cos;
+            
+            // TRASLACIÓN: añadir posición del mundo
             vertices[i] = new Vector3(pos.x + xr, pos.y + y, pos.z + zr);
         }
         return vertices;
     }
 
+    /**
+     * ========================================================================================
+     * getCylinderTopVertices - Genera vértices del círculo superior del CILINDRO
+     * ========================================================================================
+     * 
+     * GEOMETRÍA DEL CILINDRO:
+     * - Primitiva 3D definida por 2 círculos paralelos (tapas) y superficie lateral
+     * - Círculo superior: Y = pos.y + altura/2
+     * - Círculo inferior: Y = pos.y - altura/2
+     * - Radio: distancia del eje a la superficie
+     * 
+     * GENERACIÓN PROCEDURAL:
+     * El círculo se aproxima con un polígono de N lados (N=20).
+     * 
+     * Para cada vértice i en [0, sides):
+     *   angle = 2π * i / sides  (divide círculo en partes iguales)
+     *   x = radio * cos(angle)  (coordenada X en círculo)
+     *   z = radio * sin(angle)  (coordenada Z en círculo)
+     * 
+     * TRANSFORMACIONES:
+     * 1. GENERACIÓN: Círculo en plano XZ usando fórmulas paramétricas
+     * 2. ROTACIÓN Y: Rota círculo alrededor del eje Y
+     * 3. TRASLACIÓN: pos + (0, altura/2, 0)
+     * 
+     * RENDERIZADO:
+     * - La tapa se renderiza como abanico de triángulos (triangle fan)
+     * - Centro conectado a cada par de vértices consecutivos
+     * - 20 triángulos por tapa (20 lados)
+     * 
+     * @param pos Centro del cilindro
+     * @param radio Radio de las tapas circulares
+     * @param altura Distancia entre tapas
+     * @param rotY Rotación del cilindro alrededor del eje Y
+     * @return Array de 20 vértices formando el círculo superior
+     */
     public Vector3[] getCylinderTopVertices(Vector3 pos, int radio, int altura, double rotY){
-        int sides = 20;
+        int sides = 20; // Aproximación poligonal (20-gon ≈ círculo)
         Vector3[] top = new Vector3[sides];
+        
+        // Pre-calcular rotación
         double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        
+        // GENERACIÓN PROCEDURAL: Círculo paramétrico
         for(int i=0;i<sides;i++){
-            double angle = 2*Math.PI*i/sides;
+            double angle = 2*Math.PI*i/sides; // Ángulo equidistante
+            
+            // CURVA PARAMÉTRICA 3D: Círculo en plano XZ
+            // x(t) = r*cos(2πt)
+            // z(t) = r*sin(2πt)
+            // y(t) = altura/2 (constante)
             double x = radio * Math.cos(angle);
             double z = radio * Math.sin(angle);
+            
+            // ROTACIÓN alrededor de Y
             double xr = x * cos - z * sin;
             double zr = x * sin + z * cos;
+            
+            // TRASLACIÓN: posición + offset vertical
             top[i] = new Vector3(pos.x + xr, pos.y + altura/2.0, pos.z + zr);
         }
         return top;
     }
 
+    /**
+     * ========================================================================================
+     * getCylinderBottomVertices - Genera vértices del círculo inferior del CILINDRO
+     * ========================================================================================
+     * 
+     * Idéntico a getCylinderTopVertices() pero con Y = pos.y - altura/2
+     * 
+     * @param pos Centro del cilindro
+     * @param radio Radio de las tapas circulares
+     * @param altura Distancia entre tapas
+     * @param rotY Rotación del cilindro alrededor del eje Y
+     * @return Array de 20 vértices formando el círculo inferior
+     */
     public Vector3[] getCylinderBottomVertices(Vector3 pos, int radio, int altura, double rotY){
-        int sides = 20;
+        int sides = 20; // Aproximación poligonal
         Vector3[] bottom = new Vector3[sides];
+        
         double cos = Math.cos(rotY), sin = Math.sin(rotY);
+        
+        // GENERACIÓN PROCEDURAL: Círculo paramétrico (igual que top pero en Y negativo)
         for(int i=0;i<sides;i++){
             double angle = 2*Math.PI*i/sides;
+            
+            // CURVA PARAMÉTRICA: Círculo en plano XZ
             double x = radio * Math.cos(angle);
             double z = radio * Math.sin(angle);
+            
+            // ROTACIÓN + TRASLACIÓN
             double xr = x * cos - z * sin;
             double zr = x * sin + z * cos;
             bottom[i] = new Vector3(pos.x + xr, pos.y - altura/2.0, pos.z + zr);
@@ -139,30 +254,103 @@ public class SoftwareRenderer {
         return bottom;
     }
 
+    /**
+     * ========================================================================================
+     * Constructor - Inicializa el renderer con DOBLE BUFFER
+     * ========================================================================================
+     * 
+     * DOBLE BUFFER (Double Buffering) - REQUISITO DEL PROYECTO:
+     * 
+     * PROBLEMA SIN DOBLE BUFFER:
+     * - Si se renderiza directamente en pantalla, el usuario ve el dibujo parcial
+     * - Esto causa parpadeo (flickering) y tearing (imagen cortada)
+     * - Especialmente notorio en animaciones @ 60+ FPS
+     * 
+     * SOLUCIÓN: DOBLE BUFFER
+     * Usar 2 BufferedImage:
+     * 1. backBuffer: Donde se DIBUJA (invisible al usuario)
+     * 2. frontBuffer: Donde se MUESTRA (visible en pantalla)
+     * 
+     * CICLO DE RENDERIZADO:
+     * 1. Limpiar backBuffer (clear)
+     * 2. Renderizar todos los objetos en backBuffer (setRGB píxel por píxel)
+     * 3. swapBuffers(): Intercambiar referencias (backBuffer ↔ frontBuffer)
+     * 4. paintComponent() dibuja frontBuffer en pantalla
+     * 
+     * VENTAJAS:
+     * - No se ve renderizado parcial (imagen siempre completa)
+     * - Elimina parpadeo (flickering)
+     * - Reduce tearing visual
+     * - Permite multi-threading seguro
+     * 
+     * SINCRONIZACIÓN:
+     * - swapBuffers() es synchronized para evitar race conditions
+     * - RenderThread dibuja en backBuffer mientras AWT muestra frontBuffer
+     * 
+     * @param ancho Ancho de la imagen en píxeles
+     * @param alto Alto de la imagen en píxeles
+     */
     public SoftwareRenderer(int ancho, int alto) {
         this.ancho = ancho;
         this.alto = alto;
-        // Use double buffering: draw to backBuffer, present frontBuffer.
+        
+        // DOBLE BUFFER: Crear dos imágenes separadas
+        // frontBuffer = visible en pantalla (lectura por AWT)
+        // backBuffer = invisible, donde se dibuja (escritura por RenderThread)
         frontBuffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
         backBuffer = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB);
-     zBuffer = new double[ancho * alto];
-    ownerBuffer = new int[ancho * alto];
+        
+        // Z-buffer para depth testing (oclusión 3D)
+        zBuffer = new double[ancho * alto];
+        ownerBuffer = new int[ancho * alto]; // Tracking de triángulos por píxel
     }
 
-    // Return the currently displayed (front) buffer. Synchronized to avoid
-    // tearing when swapping from another thread.
+    /**
+     * ========================================================================================
+     * getBuffer - Obtiene el buffer FRONTAL (visible)
+     * ========================================================================================
+     * 
+     * THREAD-SAFETY:
+     * - synchronized para evitar tearing cuando se intercambian buffers
+     * - AWT Event Dispatch Thread llama este método desde paintComponent()
+     * - RenderThread puede estar haciendo swap simultáneamente
+     * 
+     * @return frontBuffer (imagen visible en pantalla)
+     */
     public synchronized BufferedImage getBuffer() {
         return frontBuffer;
     }
 
-    // Swap front/back buffers atomically. Call this after finishing all draw
-    // calls for the frame so the UI can paint the newly rendered image.
+    /**
+     * ========================================================================================
+     * swapBuffers - Intercambia buffers front/back (DOBLE BUFFER)
+     * ========================================================================================
+     * 
+     * OPERACIÓN ATÓMICA:
+     * Intercambia las referencias de los buffers para que:
+     * - Lo que estaba en backBuffer (recién dibujado) → pase a frontBuffer (visible)
+     * - Lo que estaba en frontBuffer → pase a backBuffer (será sobreescrito)
+     * 
+     * SINCRONIZACIÓN:
+     * - synchronized para atomicidad (operación indivisible)
+     * - Evita que paintComponent() lea un buffer a medio intercambiar
+     * 
+     * LLAMADO POR:
+     * - RenderThread al finalizar cada frame (~143 veces/segundo)
+     * - Después de renderizar todas las entidades y UI
+     * 
+     * EQUIVALENTE EN OPENGL/DIRECTX:
+     * - glSwapBuffers() en OpenGL
+     * - Present() en DirectX
+     * - Este proyecto usa software rendering (sin GPU)
+     */
     public synchronized void swapBuffers(){
         // No diagnostic overlay / hole-filling in production renderer to keep pipeline tight.
 
+        // Intercambio de referencias (operación O(1), instantánea)
         BufferedImage tmp = frontBuffer;
-        frontBuffer = backBuffer;
-        backBuffer = tmp;
+        frontBuffer = backBuffer; // backBuffer (nuevo) → pantalla
+        backBuffer = tmp;         // frontBuffer (viejo) → reutilizar
     }
 
     public void clear(Color c){
@@ -359,36 +547,83 @@ public class SoftwareRenderer {
         }
     }
 
-    // ---------------- Cilindro ----------------
+    /**
+     * ============================================================================================
+     * drawCylinder - Renderiza un CILINDRO (PRIMITIVA 3D)
+     * ============================================================================================
+     * 
+     * ESTRUCTURA DEL CILINDRO:
+     * - 2 tapas circulares (top y bottom)
+     * - Superficie lateral conectando ambas tapas
+     * - Total de triángulos: 2n (n por cada tapa) + wireframe lateral
+     * 
+     * ALGORITMO DE RENDERIZADO:
+     * 
+     * 1. TAPAS (Triangle Fan):
+     *    - Calcular centro promediando todos los vértices
+     *    - Para cada par de vértices consecutivos (i, i+1):
+     *      * Top: centerTop → top[i] → top[i+1]
+     *      * Bottom: centerBottom → bottom[i+1] → bottom[i] (winding invertido)
+     * 
+     * 2. SUPERFICIE LATERAL (Wireframe):
+     *    - Dibujar líneas verticales: top[i] ↔ bottom[i]
+     *    - Dibujar líneas horizontales en cada tapa
+     * 
+     * WINDING ORDER (Orden de vértices):
+     * - Top: Counter-clockwise (CCW) desde arriba
+     * - Bottom: Clockwise (CW) desde abajo (invertido para consistencia)
+     * - Esto permite backface culling correcto
+     * 
+     * BACKFACE CULLING:
+     * - Solo se renderizan caras visibles desde la cámara
+     * - Normal apunta hacia afuera del cilindro
+     * - Se calcula cross product (v1-v0) × (v2-v0)
+     * 
+     * USOS EN EL PROYECTO:
+     * - Troncos de árboles
+     * - Tallos de flores
+     * - Posibles extremidades de animales
+     * 
+     * @param top Array de vértices del círculo superior
+     * @param bottom Array de vértices del círculo inferior
+     * @param cam Cámara para proyección
+     * @param color Color del cilindro
+     */
     public void drawCylinder(Vector3[] top, Vector3[] bottom, Camera cam, Color color){
         int n = top.length;
         if(n == 0) return;
-        // compute center points for top and bottom (average)
+        
+        // PASO 1: Calcular centros de las tapas (promedio de vértices)
         Vector3 centerTop = new Vector3(0,0,0);
         Vector3 centerBottom = new Vector3(0,0,0);
         for(int i=0;i<n;i++){
             centerTop = centerTop.add(top[i]);
             centerBottom = centerBottom.add(bottom[i]);
         }
-        centerTop = centerTop.scale(1.0 / n);
+        centerTop = centerTop.scale(1.0 / n);       // Centro = promedio
         centerBottom = centerBottom.scale(1.0 / n);
 
-        // draw filled top cap (triangle fan)
+        // PASO 2: Renderizar tapa superior (triangle fan, n triángulos)
         for(int i=0;i<n;i++){
-            int next = (i+1)%n;
+            int next = (i+1)%n; // Siguiente vértice (con wrap-around)
+            // Triángulo: centro → vértice i → vértice i+1
             drawTriangle(centerTop, top[i], top[next], cam, color);
         }
-        // draw filled bottom cap (triangle fan) - winding reversed to keep consistent culling
+        
+        // PASO 3: Renderizar tapa inferior (triangle fan, winding invertido)
         for(int i=0;i<n;i++){
             int next = (i+1)%n;
+            // Orden invertido para mantener normal apuntando hacia afuera
             drawTriangle(centerBottom, bottom[next], bottom[i], cam, color);
         }
 
-        // draw perimeter lines for visual definition of sides
+        // PASO 4: Dibujar wireframe de la superficie lateral (definición visual)
         for(int i=0; i<n; i++){
             int next = (i+1)%n;
+            // Líneas horizontales (perímetro de las tapas)
             drawLine3D(top[i], top[next], cam, color);
             drawLine3D(bottom[i], bottom[next], cam, color);
+            // Líneas verticales (conectan tapas)
             drawLine3D(top[i], bottom[i], cam, color);
         }
     }

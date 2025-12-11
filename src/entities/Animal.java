@@ -137,28 +137,87 @@ public class Animal implements Renderable {
     }
 
     // Simple mutation: tweak color and size slightly using a new seed
+    /**
+     * ========================================================================================
+     * mutate - Aplica mutación genética al animal (color y tamaño)
+     * ========================================================================================
+     * 
+     * CONCEPTOS IMPLEMENTADOS:
+     * - EVOLUCIÓN DETERMINISTA: Usa seed para generar mutaciones reproducibles
+     * - ESCALA (Scale): Modifica voxelSize para cambiar tamaño del animal
+     * 
+     * MUTACIÓN DE COLOR:
+     * Varía RGB en ±20 valores, manteniéndolo en rango [10, 255]
+     * 
+     * MUTACIÓN DE TAMAÑO (ESCALA):
+     * - Varía voxelSize en ±3 píxeles
+     * - voxelSize actúa como FACTOR DE ESCALA para todos los cubos del animal
+     * - Cada voxel se posiciona en: posicion + offset * voxelSize
+     * - Esto implementa TRANSFORMACIÓN DE ESCALA sin matriz explícita
+     * - Tamaño mínimo: 8 píxeles (evita animales microscópicos)
+     * 
+     * IMPLEMENTACIÓN DE ESCALA:
+     * En lugar de matriz de escala 3x3, multiplicamos directamente coordenadas:
+     * worldPos = animalPos + (localOffset * voxelSize)
+     * 
+     * Esto es equivalente a:
+     * [ voxelSize    0          0       ] [ offset.x ]
+     * [    0      voxelSize     0       ] [ offset.y ]
+     * [    0         0       voxelSize  ] [ offset.z ]
+     * 
+     * @param newSeed Seed para generar mutación determinista
+     */
     public void mutate(long newSeed){
         Random r = new Random(newSeed);
-        int dr = r.nextInt(41)-20;
+        
+        // MUTACIÓN DE COLOR (RGB)
+        int dr = r.nextInt(41)-20; // ±20
         int dg = r.nextInt(41)-20;
         int db = r.nextInt(41)-20;
         int nr = Math.max(10, Math.min(255, color.getRed() + dr));
         int ng = Math.max(10, Math.min(255, color.getGreen() + dg));
         int nb = Math.max(10, Math.min(255, color.getBlue() + db));
         color = new Color(nr, ng, nb);
-        // size mutation
-        int ds = r.nextInt(7)-3;
-        voxelSize = Math.max(8, voxelSize + ds);
+        
+        // MUTACIÓN DE TAMAÑO (ESCALA)
+        // Este es el factor de escala que afecta a TODOS los voxels del animal
+        int ds = r.nextInt(7)-3; // ±3 píxeles
+        voxelSize = Math.max(8, voxelSize + ds); // Mínimo 8px para visibilidad
     }
 
-    // Provide AABB covering all voxels (world-space)
+    /**
+     * ========================================================================================
+     * getAABBMin - Calcula esquina mínima del Axis-Aligned Bounding Box
+     * ========================================================================================
+     * 
+     * CONCEPTOS IMPLEMENTADOS:
+     * - ESCALA (Scale): voxelSize escala las coordenadas locales a mundo
+     * - TRASLACIÓN (Translation): posicion desplaza del origen local a mundo
+     * - AABB (Axis-Aligned Bounding Box): Para detección de colisiones
+     * 
+     * TRANSFORMACIÓN COMPLETA:
+     * worldPos = posicion + (localOffset * voxelSize)
+     * 
+     * Esto combina dos transformaciones:
+     * 1. ESCALA: localOffset * voxelSize (multiplica coordenadas por factor)
+     * 2. TRASLACIÓN: + posicion (desplaza al mundo)
+     * 
+     * Es equivalente a aplicar matriz Model = Translation * Scale:
+     * M = T(posicion) * S(voxelSize)
+     * 
+     * @return Esquina mínima (x, y, z) del bounding box en world space
+     */
     public math.Vector3 getAABBMin(){
         if(voxels.isEmpty()) return new math.Vector3(posicion.x, posicion.y, posicion.z);
         double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
         for(Vector3 off : voxels){
-            double wx = posicion.x + off.x * voxelSize;
-            double wy = posicion.y + off.y * voxelSize;
-            double wz = posicion.z + off.z * voxelSize;
+            // TRANSFORMACIÓN: Escala + Traslación
+            // worldPos = posicion + (localOffset * voxelSize)
+            double wx = posicion.x + off.x * voxelSize; // Escala X, luego traslada
+            double wy = posicion.y + off.y * voxelSize; // Escala Y, luego traslada
+            double wz = posicion.z + off.z * voxelSize; // Escala Z, luego traslada
+            
+            // Extender AABB para incluir este voxel (cubo tiene radio voxelSize/2)
             minX = Math.min(minX, wx - voxelSize/2.0);
             minY = Math.min(minY, wy - voxelSize/2.0);
             minZ = Math.min(minZ, wz - voxelSize/2.0);
@@ -166,13 +225,25 @@ public class Animal implements Renderable {
         return new math.Vector3(minX, minY, minZ);
     }
 
+    /**
+     * ========================================================================================
+     * getAABBMax - Calcula esquina máxima del Axis-Aligned Bounding Box
+     * ========================================================================================
+     * 
+     * CONCEPTOS: Igual que getAABBMin() pero calcula esquina opuesta (máxima)
+     * 
+     * @return Esquina máxima (x, y, z) del bounding box en world space
+     */
     public math.Vector3 getAABBMax(){
         if(voxels.isEmpty()) return new math.Vector3(posicion.x, posicion.y, posicion.z);
         double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
         for(Vector3 off : voxels){
+            // TRANSFORMACIÓN: Escala + Traslación (igual que en getAABBMin)
             double wx = posicion.x + off.x * voxelSize;
             double wy = posicion.y + off.y * voxelSize;
             double wz = posicion.z + off.z * voxelSize;
+            
+            // Extender AABB para incluir este voxel
             maxX = Math.max(maxX, wx + voxelSize/2.0);
             maxY = Math.max(maxY, wy + voxelSize/2.0);
             maxZ = Math.max(maxZ, wz + voxelSize/2.0);
