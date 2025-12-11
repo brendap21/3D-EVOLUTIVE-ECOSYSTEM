@@ -140,6 +140,7 @@ public class EcosistemaApp {
      */
     public static Renderable createAnimalOfType(int type, Vector3 pos, long seed) {
         entities.BaseAnimal.setWorld(mundoRef);
+        entities.Depredador.setWorldReference(mundoRef);
         switch (type) {
             case 0: return new AnimalType01(pos, seed);
             case 1: return new AnimalType02(pos, seed);
@@ -151,6 +152,7 @@ public class EcosistemaApp {
             case 7: return new AnimalType08(pos, seed);
             case 8: return new AnimalType09(pos, seed);
             case 9: return new AnimalType10(pos, seed);
+            case 10: return new entities.Depredador(pos, seed); // Depredador
             default: return null;
         }
     }

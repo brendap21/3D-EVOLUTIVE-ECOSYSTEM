@@ -94,9 +94,9 @@ public class RenderPanel extends JPanel {
 
     private List<ButtonBounds> pauseMenuButtons = Collections.emptyList();
     
-    // Animal selection
-    private entities.BaseAnimal hoveredAnimal = null;
-    private entities.BaseAnimal selectedAnimal = null;
+    // Animal selection (can be BaseAnimal or Depredador)
+    private Renderable hoveredAnimal = null;
+    private Renderable selectedAnimal = null;
     private double animalPanelSlideProgress = 0.0;
     private ButtonBounds deleteAnimalButton = null;
     private boolean animalPanelActive = false; // Si el panel está activo
@@ -491,7 +491,7 @@ public class RenderPanel extends JPanel {
         // If animal panel is open and ESC is pressed, close it
         if (animalPanelActive && e.getKeyCode() == KeyEvent.VK_ESCAPE) {
             if (selectedAnimal != null) {
-                selectedAnimal.setSelected(false);
+                setAnimalSelected(selectedAnimal, false);
             }
             selectedAnimal = null;
             animalPanelActive = false;
@@ -516,7 +516,7 @@ public class RenderPanel extends JPanel {
                     if (mundo != null) {
                         mundo.removeEntity(selectedAnimal);
                     }
-                    selectedAnimal.setSelected(false);
+                    setAnimalSelected(selectedAnimal, false);
                     selectedAnimal = null;
                     animalPanelActive = false;
                     controles.setAnimalPanelOpen(false);
@@ -574,15 +574,77 @@ public class RenderPanel extends JPanel {
                 
                 // Check Eliminar button
                 if (mx >= btn3X && mx < btn3X + buttonWidth && my >= btn3Y && my < btn3Y + buttonHeight) {
-                    if (mundo != null) {
-                        mundo.removeEntity(selectedAnimal);
-                    }
-                    selectedAnimal.setSelected(false);
+                    // Start death animation
+                    ba.markForDeath();
+                    setAnimalSelected(selectedAnimal, false);
                     selectedAnimal = null;
                     animalPanelActive = false;
                     controles.setAnimalPanelOpen(false);
                     setTransientMessage("Animal eliminado", new Color(255, 150, 50), 2000);
                     return;
+                }
+            }
+        } else if (selectedAnimal != null && selectedAnimal instanceof entities.Depredador) {
+            // Handle depredador panel clicks
+            if (SwingUtilities.isLeftMouseButton(e)) {
+                entities.Depredador dep = (entities.Depredador) selectedAnimal;
+                
+                // Button dimensions for depredador - DEBE SER IDÉNTICO A drawDepredadorInfoPanel()
+                int panelWidth = 320;
+                int panelHeight = 280;
+                int panelX = ancho - (int)(panelWidth * animalPanelSlideProgress);
+                int panelY = alto / 2 - panelHeight / 2;
+                
+                // Calcular lineY exactamente como en drawDepredadorInfoPanel
+                int lineY = panelY + 110;
+                lineY += 18; // Velocidad
+                lineY += 18; // Tiempo en mapa
+                lineY += 18; // Característica 1
+                lineY += 18; // Característica 2
+                lineY += 30; // Spacing ANTES del botón
+                
+                // Ahora lineY apunta exactamente donde está el botón
+                int buttonHeight = 28;
+                int buttonWidth = 130;
+                int btnX = panelX + (panelWidth - buttonWidth) / 2;
+                int btnY = lineY;
+                
+                // El texto se dibuja en y + 7, así que el área visual está 7 píxeles más abajo
+                // Por eso necesitamos expandir más para capturar donde el usuario ve las letras
+                int clickPaddingTop = 15;    // Expansión hacia arriba (más generosa)
+                int clickPaddingBottom = 5;  // Expansión hacia abajo
+                
+                // DEBUG: Imprimir info de clic
+                System.out.println("[DEBUG] Click en depredador - mx=" + mx + ", my=" + my);
+                System.out.println("[DEBUG] Botón calculado: x=" + btnX + "-" + (btnX+buttonWidth) + ", y=" + btnY + "-" + (btnY+buttonHeight));
+                System.out.println("[DEBUG] Área visual del texto: y=" + (btnY+7) + "-" + (btnY+7+10));
+                
+                // Check Eliminar button - ÁREA MUY EXPANDIDA
+                boolean buttonHit = (mx >= btnX && mx < btnX + buttonWidth && 
+                                    my >= btnY - clickPaddingTop && my < btnY + buttonHeight + clickPaddingBottom);
+                
+                System.out.println("[DEBUG] Área de clic: y=" + (btnY - clickPaddingTop) + "-" + (btnY + buttonHeight + clickPaddingBottom));
+                System.out.println("[DEBUG] buttonHit=" + buttonHit);
+                
+                if (buttonHit) {
+                    System.out.println("[DEBUG] ¡Botón ELIMINAR presionado! ELIMINANDO...");
+                    
+                    // Marcar para muerte (permitir animación)
+                    dep.markForDeath();
+                    System.out.println("[DEBUG] Depredador marcado para muerte");
+                    
+                    // Desseleccionar y limpiar estado
+                    setAnimalSelected(selectedAnimal, false);
+                    selectedAnimal = null;
+                    animalPanelActive = false;
+                    animalPanelSlideProgress = 0.0;
+                    controles.setAnimalPanelOpen(false);
+                    
+                    setTransientMessage("Depredador eliminado", new Color(255, 100, 50), 2000);
+                    System.out.println("[DEBUG] Panel cerrado y estado limpiado");
+                    return;
+                } else {
+                    System.out.println("[DEBUG] Clic fuera del botón - no en rango");
                 }
             }
         }
@@ -635,7 +697,7 @@ public class RenderPanel extends JPanel {
             if (animalPanelActive) {
                 // If panel is active, this closes it
                 if (selectedAnimal != null) {
-                    selectedAnimal.setSelected(false);
+                    setAnimalSelected(selectedAnimal, false);
                 }
                 selectedAnimal = null;
                 animalPanelActive = false;
@@ -646,19 +708,19 @@ public class RenderPanel extends JPanel {
             if (hoveredAnimal != null) {
                 // Deselect previous
                 if (selectedAnimal != null) {
-                    selectedAnimal.setSelected(false);
+                    setAnimalSelected(selectedAnimal, false);
                 }
                 // Select new
                 selectedAnimal = hoveredAnimal;
-                selectedAnimal.setSelected(true);
+                setAnimalSelected(selectedAnimal, true);
                 animalPanelActive = true;
                 controles.setAnimalPanelOpen(true);
-                setTransientMessage("Animal #" + selectedAnimal.getAnimalId() + " seleccionado", new Color(100, 200, 255), 2000);
+                setTransientMessage("Animal #" + getAnimalId(selectedAnimal) + " seleccionado", new Color(100, 200, 255), 2000);
                 return;
             } else {
                 // Clicked empty space - deselect
                 if (selectedAnimal != null) {
-                    selectedAnimal.setSelected(false);
+                    setAnimalSelected(selectedAnimal, false);
                     selectedAnimal = null;
                     animalPanelActive = false;
                     controles.setAnimalPanelOpen(false);
@@ -666,7 +728,37 @@ public class RenderPanel extends JPanel {
             }
         }
         
-        controles.lockMouse(true);
+        // Solo bloquear el cursor si no hay panel activo
+        if (!animalPanelActive) {
+            controles.lockMouse(true);
+        }
+    }
+    
+    // Helper methods for animal selection
+    private void setAnimalSelected(Renderable animal, boolean selected) {
+        if (animal instanceof entities.BaseAnimal) {
+            ((entities.BaseAnimal) animal).setSelected(selected);
+        } else if (animal instanceof entities.Depredador) {
+            ((entities.Depredador) animal).setSelected(selected);
+            ((entities.Depredador) animal).setPaused(selected);
+        }
+    }
+    
+    private void setAnimalHovered(Renderable animal, boolean hovered) {
+        if (animal instanceof entities.BaseAnimal) {
+            ((entities.BaseAnimal) animal).setHovered(hovered);
+        } else if (animal instanceof entities.Depredador) {
+            ((entities.Depredador) animal).setHovered(hovered);
+        }
+    }
+    
+    private int getAnimalId(Renderable animal) {
+        if (animal instanceof entities.BaseAnimal) {
+            return ((entities.BaseAnimal) animal).getAnimalId();
+        } else if (animal instanceof entities.Depredador) {
+            return ((entities.Depredador) animal).getDepredadorId();
+        }
+        return -1;
     }
 
     private void handlePauseMenuAction(String action, Controles controles) {
@@ -743,7 +835,7 @@ public class RenderPanel extends JPanel {
         
         // Clear previous hover state
         if (hoveredAnimal != null) {
-            hoveredAnimal.setHovered(false);
+            setAnimalHovered(hoveredAnimal, false);
         }
         hoveredAnimal = null;
         
@@ -758,7 +850,7 @@ public class RenderPanel extends JPanel {
         Vector3 rayDir = cam.getForward();
         
         double closestDist = Double.POSITIVE_INFINITY;
-        entities.BaseAnimal closest = null;
+        Renderable closest = null;
         
         for (Renderable r : entidades) {
             if (r instanceof entities.BaseAnimal) {
@@ -791,17 +883,46 @@ public class RenderPanel extends JPanel {
                     closestDist = tMin;
                     closest = animal;
                 }
+            } else if (r instanceof entities.Depredador) {
+                entities.Depredador dep = (entities.Depredador) r;
+                
+                // Simple sphere collision for depredador
+                Vector3 depPos = dep.getPosition();
+                Vector3 toTarget = depPos.subtract(rayOrigin);
+                double projection = toTarget.dot(rayDir);
+                
+                if (projection > 0) {
+                    Vector3 closestPoint = rayOrigin.add(rayDir.scale(projection));
+                    double distance = closestPoint.subtract(depPos).length();
+                    double radius = dep.getCollisionRadius();
+                    
+                    if (distance < radius && projection < closestDist && projection < 500) {
+                        closestDist = projection;
+                        closest = dep;
+                    }
+                }
             }
         }
         
         if (closest != null) {
             hoveredAnimal = closest;
-            hoveredAnimal.setHovered(true);
+            if (closest instanceof entities.BaseAnimal) {
+                ((entities.BaseAnimal)closest).setHovered(true);
+            } else if (closest instanceof entities.Depredador) {
+                ((entities.Depredador)closest).setHovered(true);
+            }
         }
     }
     
     private void drawAnimalInfoPanel() {
         if (selectedAnimal == null || !animalPanelActive) return;
+        
+        // Check if it's a Depredador
+        if (selectedAnimal instanceof entities.Depredador) {
+            drawDepredadorInfoPanel();
+            return;
+        }
+        
         if (!(selectedAnimal instanceof entities.BaseAnimal)) return;
         
         entities.BaseAnimal ba = (entities.BaseAnimal) selectedAnimal;
@@ -1064,5 +1185,146 @@ public class RenderPanel extends JPanel {
         
         // Button text (small font)
         PixelFont.drawText(renderer, x + 5, y + 7, text, 1, txtColor);
+    }
+    
+    private void drawDepredadorInfoPanel() {
+        if (selectedAnimal == null || !animalPanelActive) return;
+        if (!(selectedAnimal instanceof entities.Depredador)) return;
+        
+        entities.Depredador dep = (entities.Depredador) selectedAnimal;
+        BufferedImage buffer = renderer.getBuffer();
+        if (buffer == null) return;
+        
+        // Panel dimensions and position - smaller since no evolution info
+        int panelWidth = 320;
+        int panelHeight = 280;
+        int panelX = ancho - (int)(panelWidth * animalPanelSlideProgress);
+        int panelY = alto / 2 - panelHeight / 2;
+        
+        // Draw gradient background with borders (same as animal panel)
+        Color bgColor1 = new Color(40, 15, 15); // Darker red tint
+        Color bgColor2 = new Color(60, 25, 25); // Lighter red tint
+        
+        for (int y = panelY; y < panelY + panelHeight; y++) {
+            for (int x = panelX; x < panelX + panelWidth; x++) {
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    try {
+                        float gradientFactor = (float)(y - panelY) / panelHeight;
+                        int r = (int)(bgColor1.getRed() * (1 - gradientFactor) + bgColor2.getRed() * gradientFactor);
+                        int g = (int)(bgColor1.getGreen() * (1 - gradientFactor) + bgColor2.getGreen() * gradientFactor);
+                        int b = (int)(bgColor1.getBlue() * (1 - gradientFactor) + bgColor2.getBlue() * gradientFactor);
+                        Color panelColor = new Color(r, g, b, 230);
+                        buffer.setRGB(x, y, panelColor.getRGB());
+                    } catch (Exception e) {}
+                }
+            }
+        }
+        
+        // Draw outer border (red glow)
+        Color outerBorder = new Color(255, 100, 100);
+        for (int x = panelX; x < panelX + panelWidth; x++) {
+            if (x >= 0 && x < ancho) {
+                try {
+                    for (int i = 0; i < 3; i++) {
+                        if (panelY - i >= 0) buffer.setRGB(x, panelY - i, outerBorder.getRGB());
+                        if (panelY + panelHeight + i < alto) buffer.setRGB(x, panelY + panelHeight + i, outerBorder.getRGB());
+                    }
+                } catch (Exception e) {}
+            }
+        }
+        for (int y = panelY; y < panelY + panelHeight; y++) {
+            if (y >= 0 && y < alto) {
+                try {
+                    for (int i = 0; i < 3; i++) {
+                        if (panelX - i >= 0) buffer.setRGB(panelX - i, y, outerBorder.getRGB());
+                        if (panelX + panelWidth + i < ancho) buffer.setRGB(panelX + panelWidth + i, y, outerBorder.getRGB());
+                    }
+                } catch (Exception e) {}
+            }
+        }
+        
+        // Draw inner border
+        Color innerBorder = new Color(255, 150, 150);
+        for (int x = panelX; x < panelX + panelWidth; x++) {
+            if (x >= 0 && x < ancho) {
+                try {
+                    buffer.setRGB(x, panelY, innerBorder.getRGB());
+                    buffer.setRGB(x, panelY + panelHeight - 1, innerBorder.getRGB());
+                } catch (Exception e) {}
+            }
+        }
+        for (int y = panelY; y < panelY + panelHeight; y++) {
+            if (y >= 0 && y < alto) {
+                try {
+                    buffer.setRGB(panelX, y, innerBorder.getRGB());
+                    buffer.setRGB(panelX + panelWidth - 1, y, innerBorder.getRGB());
+                } catch (Exception e) {}
+            }
+        }
+        
+        // Draw title bar with gradient (red theme)
+        Color titleBg1 = new Color(150, 50, 50);
+        Color titleBg2 = new Color(180, 70, 70);
+        for (int y = panelY + 2; y < panelY + 35; y++) {
+            for (int x = panelX + 2; x < panelX + panelWidth - 2; x++) {
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    try {
+                        float grad = (float)(y - panelY - 2) / 33;
+                        int r = (int)(titleBg1.getRed() * (1 - grad) + titleBg2.getRed() * grad);
+                        int g = (int)(titleBg1.getGreen() * (1 - grad) + titleBg2.getGreen() * grad);
+                        int b = (int)(titleBg1.getBlue() * (1 - grad) + titleBg2.getBlue() * grad);
+                        buffer.setRGB(x, y, new Color(r, g, b).getRGB());
+                    } catch (Exception e) {}
+                }
+            }
+        }
+        
+        // Draw title
+        PixelFont.drawText(renderer, panelX + 15, panelY + 10, "DEPREDADOR", 2, new Color(255, 200, 200));
+        
+        // Draw depredador ID with larger font
+        String depInfo = "ID: #" + dep.getDepredadorId();
+        PixelFont.drawText(renderer, panelX + 15, panelY + 45, depInfo, 3, new Color(255, 150, 100));
+        
+        // Draw type
+        PixelFont.drawText(renderer, panelX + 15, panelY + 75, "Cazador", 2, new Color(200, 80, 80));
+        
+        // Draw stats
+        int lineY = panelY + 110;
+        
+        // Velocidad (Speed)
+        double speed = dep.getSpeed();
+        String speedText = String.format("Velocidad: %.2f", speed);
+        PixelFont.drawText(renderer, panelX + 15, lineY, speedText, 1, new Color(255, 180, 180));
+        lineY += 18;
+        
+        // Tiempo en mapa (Time in map)
+        long currentTime = System.currentTimeMillis();
+        long elapsed = currentTime - dep.getSpawnTime();
+        double timeInMap = elapsed / 1000.0;
+        String timeText = String.format("T. en mapa: %.1fs", timeInMap);
+        PixelFont.drawText(renderer, panelX + 15, lineY, timeText, 1, new Color(255, 200, 180));
+        lineY += 18;
+        
+        // Característica especial
+        PixelFont.drawText(renderer, panelX + 15, lineY, "Puede cazar presas", 1, new Color(255, 100, 100));
+        lineY += 18;
+        
+        PixelFont.drawText(renderer, panelX + 15, lineY, "al tocarlas", 1, new Color(255, 100, 100));
+        lineY += 30;
+        
+        // Draw eliminate button (no evolution buttons for depredador)
+        int buttonHeight = 28;
+        int buttonWidth = 130;
+        int btnX = panelX + (panelWidth - buttonWidth) / 2; // Centered
+        int btnY = lineY;
+        
+        drawEvolutionButton(buffer, btnX, btnY, buttonWidth, buttonHeight, "ELIMINAR", true, panelX, panelY, panelWidth);
+        
+        // Store button bounds for click detection
+        deleteAnimalButton = new ButtonBounds(btnX, btnY, buttonWidth, buttonHeight, "delete_depredador");
+        
+        // Draw hint
+        PixelFont.drawText(renderer, panelX + 15, panelY + panelHeight - 15, "ESC para cerrar", 1, new Color(150, 150, 150));
     }
 }

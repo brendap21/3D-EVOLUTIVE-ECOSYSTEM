@@ -30,7 +30,8 @@ public class AnimalSpawnerMenu {
         "Tipo 7",      // 7
         "Tipo 8",      // 8
         "Tipo 9",      // 9
-        "Tipo 10"      // 10
+        "Tipo 10",     // 10
+        "Depredador"   // 11
     };
     
     private MenuState state = MenuState.CLOSED;

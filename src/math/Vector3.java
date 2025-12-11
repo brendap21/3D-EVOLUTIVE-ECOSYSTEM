@@ -34,4 +34,16 @@ public class Vector3 {
             this.x*v.y - this.y*v.x
         );
     }
+    
+    public Vector3 copy() {
+        return new Vector3(this.x, this.y, this.z);
+    }
+    
+    public double dot(Vector3 v) {
+        return this.x * v.x + this.y * v.y + this.z * v.z;
+    }
+    
+    public double length() {
+        return Math.sqrt(x*x + y*y + z*z);
+    }
 }

@@ -77,5 +77,32 @@ public class Mundo {
         for (Renderable r : entidades) {
             r.update();
         }
+        
+        // Remove dead animals and depredadores
+        List<Renderable> toRemove = new ArrayList<>();
+        for (Renderable r : entidades) {
+            if (r instanceof entities.BaseAnimal) {
+                entities.BaseAnimal animal = (entities.BaseAnimal) r;
+                if (animal.isMarkedForDeath()) {
+                    toRemove.add(r);
+                    if (selectedAnimal == r) {
+                        selectedAnimal = null; // Deselect if was selected
+                    }
+                }
+            } else if (r instanceof entities.Depredador) {
+                entities.Depredador dep = (entities.Depredador) r;
+                if (dep.isMarkedForDeath()) {
+                    toRemove.add(r);
+                }
+            }
+        }
+        
+        // Remove marked entities
+        for (Renderable r : toRemove) {
+            removeEntity(r);
+            if (r instanceof Animal) {
+                animales.remove(r);
+            }
+        }
     }
 }

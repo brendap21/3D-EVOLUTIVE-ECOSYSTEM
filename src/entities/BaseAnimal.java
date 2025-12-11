@@ -67,6 +67,27 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     private BaseAnimal matingPartner = null; // Referencia al compañero
     private boolean offspringSpawned = false; // Flag para evitar crear dos crías
     
+    // Death system
+    private boolean markedForDeath = false;
+    private boolean isDying = false;
+    private double deathProgress = 0.0;
+    private static final double DEATH_DURATION = 1.0; // 1 segundo de animación de muerte
+    private List<DeathParticle> deathParticles = new ArrayList<>();
+    
+    private static class DeathParticle {
+        Vector3 position;
+        Vector3 velocity;
+        Color color;
+        double life;
+        
+        DeathParticle(Vector3 pos, Vector3 vel, Color col) {
+            this.position = pos.copy();
+            this.velocity = vel.copy();
+            this.color = col;
+            this.life = 1.0;
+        }
+    }
+    
     // Spawn animation
     private boolean isSpawning = true;
     private double spawnProgress = 0.0;
@@ -143,6 +164,11 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     
     @Override
     public void render(SoftwareRenderer renderer, Camera cam) {
+        if (isDying) {
+            renderDeathAnimation(renderer, cam);
+            return;
+        }
+        
         if (isSpawning) {
             renderSpawnAnimation(renderer, cam);
         } else {
@@ -233,6 +259,54 @@ public abstract class BaseAnimal implements Renderable, Collidable {
                     Color burstColor = new Color(255, 255, 100);
                     renderer.drawCube(burstVerts, cam, burstColor);
                 }
+            }
+        }
+    }
+    
+    /**
+     * Renderiza la animación de muerte: partículas dispersándose.
+     */
+    protected void renderDeathAnimation(SoftwareRenderer renderer, Camera cam) {
+        // Voxels del animal se vuelven más transparentes
+        double fadeOut = 1.0 - deathProgress;
+        
+        // Renderizar voxels del animal desapareciendo
+        if (deathProgress < 0.5) {
+            for (Vector3 v : voxels) {
+                Vector3 rotatedVoxel = rotateVoxel(v, yaw);
+                Vector3 worldPos = new Vector3(
+                    posicion.x + rotatedVoxel.x * voxelSize,
+                    posicion.y + rotatedVoxel.y * voxelSize,
+                    posicion.z + rotatedVoxel.z * voxelSize
+                );
+                
+                // Color que se oscurece
+                int alpha = (int)(255 * fadeOut * 2.0); // Desaparece en la primera mitad
+                Color fadedColor = new Color(
+                    Math.max(0, color.getRed() - (int)(color.getRed() * deathProgress)),
+                    Math.max(0, color.getGreen() - (int)(color.getGreen() * deathProgress)),
+                    Math.max(0, color.getBlue() - (int)(color.getBlue() * deathProgress))
+                );
+                
+                Vector3[] verts = renderer.getCubeVertices(worldPos, voxelSize, yaw);
+                renderer.drawCube(verts, cam, fadedColor);
+            }
+        }
+        
+        // Renderizar partículas de muerte
+        for (DeathParticle p : deathParticles) {
+            if (p.life > 0) {
+                int alpha = (int)(255 * p.life);
+                Color particleColor = new Color(
+                    p.color.getRed(),
+                    p.color.getGreen(),
+                    p.color.getBlue(),
+                    Math.min(255, Math.max(0, alpha))
+                );
+                
+                int particleSize = Math.max(2, (int)(voxelSize * 0.6 * p.life));
+                Vector3[] particleVerts = renderer.getCubeVertices(p.position, particleSize, 0);
+                renderer.drawCube(particleVerts, cam, particleColor);
             }
         }
     }
@@ -627,6 +701,25 @@ public abstract class BaseAnimal implements Renderable, Collidable {
             reproductionCooldown -= 0.016; // ~60 FPS
         }
         
+        // Update death animation
+        if (isDying) {
+            deathProgress += 0.016 / DEATH_DURATION;
+            
+            // Update death particles
+            for (DeathParticle p : deathParticles) {
+                p.position.x += p.velocity.x;
+                p.position.y += p.velocity.y;
+                p.position.z += p.velocity.z;
+                p.velocity.y -= 0.2; // Gravity
+                p.life -= 0.016 / DEATH_DURATION;
+            }
+            
+            if (deathProgress >= 1.0) {
+                markedForDeath = true; // Ready to be removed
+            }
+            return; // Don't process other animations while dying
+        }
+        
         // Update mating animation
         if (isMating) {
             matingProgress += 0.016 / MATING_DURATION;
@@ -939,5 +1032,68 @@ public abstract class BaseAnimal implements Renderable, Collidable {
             maxZ = Math.max(maxZ, posicion.z + v.z * voxelSize + voxelSize/2.0);
         }
         return new Vector3(maxX, maxY, maxZ);
+    }
+    
+    // Death system methods
+    public void markForDeath() {
+        if (!isDying) {
+            isDying = true;
+            deathProgress = 0.0;
+            initializeDeathAnimation();
+        }
+    }
+    
+    private void initializeDeathAnimation() {
+        Random r = new Random(seed + System.currentTimeMillis());
+        deathParticles.clear();
+        
+        // Create particles from voxels
+        for (Vector3 v : voxels) {
+            Vector3 worldPos = new Vector3(
+                posicion.x + v.x * voxelSize,
+                posicion.y + v.y * voxelSize,
+                posicion.z + v.z * voxelSize
+            );
+            
+            // Multiple particles per voxel
+            for (int i = 0; i < 3; i++) {
+                Vector3 vel = new Vector3(
+                    (r.nextDouble() - 0.5) * 4.0,
+                    r.nextDouble() * 3.0 + 2.0,
+                    (r.nextDouble() - 0.5) * 4.0
+                );
+                
+                // Death colors: dark red, gray, black
+                Color particleColor;
+                int colorChoice = r.nextInt(3);
+                if (colorChoice == 0) {
+                    particleColor = new Color(80 + r.nextInt(40), 20, 20); // Dark red
+                } else if (colorChoice == 1) {
+                    particleColor = new Color(60 + r.nextInt(30), 60 + r.nextInt(30), 60 + r.nextInt(30)); // Gray
+                } else {
+                    particleColor = new Color(30 + r.nextInt(20), 30 + r.nextInt(20), 30 + r.nextInt(20)); // Dark gray
+                }
+                
+                deathParticles.add(new DeathParticle(worldPos, vel, particleColor));
+            }
+        }
+    }
+    
+    public boolean isMarkedForDeath() {
+        return markedForDeath;
+    }
+    
+    public boolean isDying() {
+        return isDying;
+    }
+    
+    protected Vector3 rotateVoxel(Vector3 v, double angle) {
+        double cos = Math.cos(angle);
+        double sin = Math.sin(angle);
+        return new Vector3(
+            v.x * cos - v.z * sin,
+            v.y,
+            v.x * sin + v.z * cos
+        );
     }
 }
