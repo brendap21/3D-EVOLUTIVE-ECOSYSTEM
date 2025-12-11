@@ -1,20 +1,22 @@
 # 3D EVOLUTIVE ECOSYSTEM
 
 ## Descripción
-3D EVOLUTIVE ECOSYSTEM es un proyecto de animación y visualización 3D desarrollado en Java, utilizando renderizado por software. Permite crear un ecosistema simple con cubos y cilindros, controlar la cámara con teclado y ver la escena en tiempo real mediante un panel de renderizado.
+3D EVOLUTIVE ECOSYSTEM es un  Simulador/mini-juego 3D donde animales voxel (cubos) evolucionan proceduralmente (color, tamaño, velocidad, comportamiento). El jugador puede interactuar (añadir / alimentar / eliminar), ajustar parámetros en tiempo real, guardar/cargar partidas y recorrer el mundo con cámara libre. Todo renderizado por software — solo usar operaciones por píxel (BufferedImage.setRGB/putPixel) y un JPanel para mostrar el BufferedImage.
 
-Este proyecto es parte de la materia Gráficas por Computadora 2D y 3D y sirve como base para experimentar con transformaciones, proyecciones, animación y manejo de hilos en Java.
+Este proyecto es parte de la materia Gráficas por Computadora 2D y 3D y sirve como base para experimentar con transformaciones, proyecciones, animación determinista y manejo de hilos en Java.
 
 ## Características
 
-- Renderizado 3D por software sin librerías externas.
+- Renderizado 3D por software sin librerías externas (BufferedImage.setRGB píxel a píxel).
 - Cámara libre controlable con teclado (WASD/UP/DOWN).
 - Objetos incluidos:
-  - Cubos (con posición, tamaño y color configurable)
-  - Cilindros (con radio, altura y color configurable)
-- Renderizado con doble buffer (simulado) para evitar parpadeo.
-- Estructura modular: entities, math, render, ui, main.
-- Hilos separados para renderizado y actualización de controles.
+  - Cubos (posibilidad de rotación y escala vía voxelSize)
+  - Cilindros procedimentales (troncos/tallos) generados en SoftwareRenderer
+  - Terreno como malla 3D (grid triangular)
+- Renderizado con doble buffer para evitar parpadeo.
+- Animación determinista (semillas fijas) y evolución en más de 3 minutos.
+- Estructura modular: entities, math, render, ui, main, simulation.
+- Hilos separados para renderizado (RenderThread) y simulación (Simulador).
 - Fácil de ampliar con nuevos objetos y animaciones.
 
 ## Controles
@@ -27,49 +29,22 @@ A          | Mover cámara hacia la izquierda
 D          | Mover cámara hacia la derecha
 UP         | Subir cámara (eje Y negativo)
 DOWN       | Bajar cámara (eje Y positivo)
-
-## Estructura del Proyecto
-
-- 3D-Evolutive-Ecosystem/
-- │
-- ├─ src/
-- │  ├─ main/
-- │  │  ├─ EcosistemaApp.java
-- │  │  ├─ RenderPanel.java
-- │  │  ├─ RenderThread.java
-- │  │  └─ Renderable.java
-- │  │
-- │  ├─ entities/
-- │  │  ├─ Cubo.java
-- │  │  ├─ Cilindro.java
-- │  │  └─ Curva.java
-- │  │
-- │  ├─ math/
-- │  │  ├─ Camera.java
-- │  │  ├─ Matrix4.java
-- │  │  ├─ Transform.java
-- │  │  └─ Vector3.java
-- │  │
-- │  ├─ render/
-- │  │  └─ SoftwareRenderer.java
-- │  │
-- │  └─ ui/
-- │     └─ Controles.java
-- │
-- └─ README.md
-
+Y          | Abrir menú spawn animal/depredador
+ESC        | Abrir menú de pausa
 
 ## Uso y Extensiones
 
 - Puedes agregar nuevos objetos 3D implementando la interfaz Renderable.
 - Experimentar con rotaciones, escalas y animaciones modificando el método update() de cada entidad.
 - Ajustar el FOV de la cámara en Camera para cambiar la perspectiva.
-- Implementar más formas geométricas (esferas, pirámides, etc.) usando SoftwareRenderer.
+
+## Interacción con entidades:
+-	Click derecho: Displaya un menú lateral con la información del animal/depredador (id, especie, tiempo de generación, etapa de evolucion, tiempo restante para próxima evolución y controladorees que permiten avanzar directamente a una evolución o retroceder si lo permite, además de un botón que permit eliminar dicha entidad).
 
 ## Compilación y Ejecución
 
 Desde la consola, en la raíz del proyecto:
 
-    javac -d bin src\main\*.java src\entities\*.java src\math\*.java src\ui\*.java src\render\*.java src\simulation\*.java
+    javac -d bin -sourcepath src src\main\EcosistemaApp.java
     java -cp bin main.EcosistemaApp
 
