@@ -6,23 +6,67 @@ import main.Renderable;
 import entities.BaseAnimal;
 
 /**
- * Mundo: contenedor de entidades y animales. Provee API para añadir/quitar
- * y acceder a la lista que usa el render thread.
+ * ============================================================================================
+ * Mundo - Contenedor centralizado de todas las entidades del ecosistema
+ * ============================================================================================
+ * 
+ * PROPÓSITO:
+ * Gestiona la lista de todas las entidades (animales, terreno, vegetación) del mundo 3D.
+ * Proporciona acceso thread-safe para que múltiples hilos puedan consultar/modificar.
+ * 
+ * RESPONSABILIDADES:
+ * 1. Almacenar y gestionar entidades renderizables
+ * 2. Proporcionar queries espaciales (heightmap, colisiones)
+ * 3. Gestionar spawn y eliminación de entidades
+ * 4. Mantener estado de selección de animales
+ * 5. Garantizar reproducibilidad (seeds para mundo determinista)
+ * 
+ * CONCEPTOS IMPLEMENTADOS:
+ * 1. THREAD-SAFETY:
+ *    - Métodos synchronized para evitar race conditions
+ *    - Copias defensivas (snapshots) para iteración segura
+ *    - Evita ConcurrentModificationException
+ * 
+ * 2. SEPARACIÓN DE CONCERNS:
+ *    - Lista general de Renderable (todo lo que se dibuja)
+ *    - Lista específica de BaseAnimal (para lógica de simulación)
+ *    - Permite tratar animales de forma especial sin casting constante
+ * 
+ * 3. SPATIAL QUERIES:
+ *    - getHeightAt(x,z): Obtiene altura del terreno (heightmap query)
+ *    - getCollidables(): Obtiene entidades con AABB (collision detection)
+ * 
+ * 4. DETERMINISMO:
+ *    - environmentSeed: Seed para generación reproducible de vegetación
+ *    - environmentCreatedAt: Timestamp para calcular edad de plantas
+ *    - Permite guardar/cargar mundos idénticos
+ * 
+ * ============================================================================================
  */
 public class Mundo {
+    // LISTA PRINCIPAL DE ENTIDADES (todo lo que se renderiza)
     private final List<Renderable> entidades = new ArrayList<>();
+    
+    // LISTA ESPECÍFICA DE ANIMALES (para lógica de simulación)
     private final List<BaseAnimal> animales = new ArrayList<>();
+    
+    // ANIMAL SELECCIONADO (para mostrar panel de info)
     private BaseAnimal selectedAnimal = null;
+    
+    // ESTADO DE SPAWN (para menú de generación de animales)
     private boolean waitingForSpawnPosition = false;
-    private int selectedAnimalType = -1; // tipo de animal a generar (-1=random, 0-9=tipo específico)
+    private int selectedAnimalType = -1; // -1=random, 0-9=tipo específico, 10=depredador
     
-    // Environmental growth system
-    private long lastGrowthUpdate = 0;
-    private static final long GROWTH_UPDATE_INTERVAL = 1000L; // Update every 10 seconds
-    private static final long NEW_ENTITY_SPAWN_INTERVAL = 5000L; // Spawn new entities every 5 seconds
+    // SISTEMA DE CRECIMIENTO AMBIENTAL
+    private long lastGrowthUpdate = 0; // Último tick de actualización
+    private static final long GROWTH_UPDATE_INTERVAL = 1000L; // Actualizar cada 1 segundo
+    private static final long NEW_ENTITY_SPAWN_INTERVAL = 5000L; // Spawn nuevas plantas cada 5s
     
-    // Seed for environment reproducibility
+    // SEED PARA REPRODUCIBILIDAD DEL AMBIENTE
+    // La misma seed genera exactamente el mismo mundo (árboles, rocas, pasto en mismas posiciones)
     private long environmentSeed = 12345L;
+    
+    // TIMESTAMP DE CREACIÓN (para calcular edad de plantas)
     private long environmentCreatedAt = 0L;
 
     public Mundo(){ }
