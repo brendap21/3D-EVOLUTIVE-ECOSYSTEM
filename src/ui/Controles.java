@@ -175,17 +175,6 @@ public class Controles extends KeyAdapter implements MouseMotionListener {
         if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
             setPaused(!paused);
         }
-        // When paused, allow quick save/load: 'S' = save, 'L' = load
-        if(paused && mundo != null){
-            if(e.getKeyCode() == KeyEvent.VK_S){
-                File f = new File("animals.txt");
-                simulation.Persistencia.saveAnimals(f, mundo.getAnimals());
-            }
-            if(e.getKeyCode() == KeyEvent.VK_L){
-                java.util.List<entities.Animal> loaded = simulation.Persistencia.loadAnimals(new File("animals.txt"));
-                for(entities.Animal a : loaded) mundo.addAnimal(a);
-            }
-        }
     }
     
     /**

@@ -46,6 +46,10 @@ public class Pasto implements Renderable, Collidable {
         generateGrass();
     }
 
+    public void setCreationTime(long creationTime) {
+        this.creationTime = creationTime;
+    }
+
     private void generateGrass() {
         Random r = new Random(seed);
         // Crear 3-5 tallos delgados

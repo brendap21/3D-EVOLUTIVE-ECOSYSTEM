@@ -2,7 +2,7 @@ package simulation;
 
 import java.util.Random;
 import java.util.List;
-import entities.Animal;
+import entities.BaseAnimal;
 
 /**
  * Simulador: hilo que actualiza el mundo (mutaciones, reproducción básica)
@@ -19,6 +19,8 @@ public class Simulador extends Thread {
     }
 
     public void shutdown(){ running = false; }
+    
+    public long getSeed(){ return seed; }
 
     @Override
     public void run(){
@@ -27,14 +29,14 @@ public class Simulador extends Thread {
         while(running){
             // Simple simulation step every 1s: possibly mutate a random animal
             try{ Thread.sleep(1000); } catch(Exception e){}
-            List<Animal> animals = mundo.getAnimals();
+            List<BaseAnimal> animals = mundo.getAnimals();
             if(animals.isEmpty()) { tick++; continue; }
 
             // Deterministic choice based on tick and seed
             int idx = (int)((seed + tick) % animals.size());
-            Animal a = animals.get(idx);
-            long newSeed = seed + tick * 7919 + idx * 131;
-            a.mutate(newSeed);
+            BaseAnimal a = animals.get(idx);
+            // Evolución simple: intenta forzar avance de fase si aplica
+            a.setGrowthPhase(a.getGrowthPhase());
             tick++;
             // simulation runs until shutdown() is called
         }

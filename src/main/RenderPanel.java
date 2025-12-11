@@ -11,8 +11,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import javax.swing.JPanel;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import entities.Animal;
+import entities.BaseAnimal;
 import entities.Collidable;
 import math.Camera;
 import math.Vector3;
@@ -21,6 +23,8 @@ import render.SoftwareRenderer;
 import simulation.Mundo;
 import ui.AnimalSpawnerMenu;
 import ui.Controles;
+import ui.SaveGameDialog;
+import ui.LoadGameDialog;
 
 /**
  * RenderPanel: panel principal de renderizado + HUD/spawn menu.
@@ -100,6 +104,11 @@ public class RenderPanel extends JPanel {
     private double animalPanelSlideProgress = 0.0;
     private ButtonBounds deleteAnimalButton = null;
     private boolean animalPanelActive = false; // Si el panel está activo
+    
+    // Referencias para guardar/cargar
+    private Camera camera = null;
+    private simulation.Simulador simulador = null;
+    private JFrame parentFrame = null;
 
     public RenderPanel(int ancho, int alto) {
         this.ancho = ancho;
@@ -111,6 +120,18 @@ public class RenderPanel extends JPanel {
 
     public void setMundo(Mundo m) {
         this.mundo = m;
+    }
+    
+    public void setCamera(Camera cam) {
+        this.camera = cam;
+    }
+    
+    public void setSimulador(simulation.Simulador sim) {
+        this.simulador = sim;
+    }
+    
+    public void setParentFrame(JFrame frame) {
+        this.parentFrame = frame;
     }
 
     public void render(List<Renderable> entidades, Camera cam, Controles controles) {
@@ -453,7 +474,7 @@ public class RenderPanel extends JPanel {
             }
         }
 
-        for (Animal a : mundo.getAnimals()) {
+        for (entities.BaseAnimal a : mundo.getAnimals()) {
             Vector3 ap = a.getPosicion();
             double d2 = (ap.x - result.position.x) * (ap.x - result.position.x)
                 + (ap.z - result.position.z) * (ap.z - result.position.z);
@@ -614,24 +635,13 @@ public class RenderPanel extends JPanel {
                 int clickPaddingTop = 15;    // Expansión hacia arriba (más generosa)
                 int clickPaddingBottom = 5;  // Expansión hacia abajo
                 
-                // DEBUG: Imprimir info de clic
-                System.out.println("[DEBUG] Click en depredador - mx=" + mx + ", my=" + my);
-                System.out.println("[DEBUG] Botón calculado: x=" + btnX + "-" + (btnX+buttonWidth) + ", y=" + btnY + "-" + (btnY+buttonHeight));
-                System.out.println("[DEBUG] Área visual del texto: y=" + (btnY+7) + "-" + (btnY+7+10));
-                
                 // Check Eliminar button - ÁREA MUY EXPANDIDA
                 boolean buttonHit = (mx >= btnX && mx < btnX + buttonWidth && 
                                     my >= btnY - clickPaddingTop && my < btnY + buttonHeight + clickPaddingBottom);
                 
-                System.out.println("[DEBUG] Área de clic: y=" + (btnY - clickPaddingTop) + "-" + (btnY + buttonHeight + clickPaddingBottom));
-                System.out.println("[DEBUG] buttonHit=" + buttonHit);
-                
                 if (buttonHit) {
-                    System.out.println("[DEBUG] ¡Botón ELIMINAR presionado! ELIMINANDO...");
-                    
                     // Marcar para muerte (permitir animación)
                     dep.markForDeath();
-                    System.out.println("[DEBUG] Depredador marcado para muerte");
                     
                     // Desseleccionar y limpiar estado
                     setAnimalSelected(selectedAnimal, false);
@@ -641,10 +651,7 @@ public class RenderPanel extends JPanel {
                     controles.setAnimalPanelOpen(false);
                     
                     setTransientMessage("Depredador eliminado", new Color(255, 100, 50), 2000);
-                    System.out.println("[DEBUG] Panel cerrado y estado limpiado");
                     return;
-                } else {
-                    System.out.println("[DEBUG] Clic fuera del botón - no en rango");
                 }
             }
         }
@@ -767,24 +774,95 @@ public class RenderPanel extends JPanel {
                 controles.setPaused(false);
                 break;
             case "save":
-                if (mundo != null) {
-                    java.io.File f = new java.io.File("animals.txt");
-                    simulation.Persistencia.saveAnimals(f, mundo.getAnimals());
-                }
+                handleSaveGame(controles);
                 break;
             case "load":
-                if (mundo != null) {
-                    java.io.File f = new java.io.File("animals.txt");
-                    java.util.List<Animal> loaded = simulation.Persistencia.loadAnimals(f);
-                    for (Animal a : loaded) {
-                        mundo.addAnimal(a);
-                    }
-                }
+                handleLoadGame(controles);
                 break;
             case "exit":
                 System.exit(0);
                 break;
         }
+    }
+    
+    private void handleSaveGame(Controles controles) {
+        if (mundo == null || camera == null || parentFrame == null) {
+            JOptionPane.showMessageDialog(parentFrame, "Error: Falta información para guardar", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // Mostrar diálogo de guardado
+        java.io.File saveFile = SaveGameDialog.showSaveDialog(parentFrame);
+        if (saveFile == null) {
+            return; // Usuario canceló
+        }
+        
+        // Crear estado del juego
+        simulation.Persistencia.GameState state = new simulation.Persistencia.GameState();
+        state.animals = mundo.getAnimals();
+        state.cameraPos = camera.getPosicion();
+        state.cameraYaw = camera.getYaw();
+        state.cameraPitch = camera.getPitch();
+        state.simulatorSeed = simulador != null ? simulador.getSeed() : 5555L;
+        state.environmentSeed = mundo.getEnvironmentSeed();
+        state.environmentCreatedAt = mundo.getEnvironmentCreatedAt();
+        
+        // Guardar
+        if (simulation.Persistencia.saveGameState(saveFile, state)) {
+            JOptionPane.showMessageDialog(parentFrame, "Partida guardada: " + saveFile.getName(), "Guardado", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(parentFrame, "Error al guardar la partida", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private void handleLoadGame(Controles controles) {
+        if (mundo == null || camera == null || parentFrame == null) {
+            JOptionPane.showMessageDialog(parentFrame, "Error: Falta información para cargar", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // Mostrar diálogo de carga
+        java.io.File loadFile = LoadGameDialog.showLoadDialog(parentFrame);
+        if (loadFile == null) {
+            return; // Usuario canceló
+        }
+        
+        // Cargar estado
+        simulation.Persistencia.GameState state = simulation.Persistencia.loadGameState(loadFile);
+        
+        // Limpiar mundo actual
+        mundo.clearWorld();
+        
+        // Restaurar seed y tiempo de creación del entorno para generación determinística y progreso de crecimiento
+        mundo.setEnvironmentSeed(state.environmentSeed);
+        // Ajustar el tiempo de creación para mantener el mismo progreso: restar el tiempo transcurrido desde la última sesión
+        long timeSinceCreation = state.environmentCreatedAt - System.currentTimeMillis();
+        long adjustedCreationTime = System.currentTimeMillis() + timeSinceCreation;
+        mundo.setEnvironmentCreatedAt(adjustedCreationTime);
+        
+        // Recrear terreno y entidades ambientales con tiempos ajustados
+        mundo.initializeEnvironment();
+        
+        // Restaurar posición de cámara
+        camera.setPosicion(state.cameraPos);
+        camera.setOrientation(state.cameraYaw, state.cameraPitch);
+        
+        // Restaurar animales con ajuste de altura
+        for (entities.BaseAnimal a : state.animals) {
+            // Ajustar posición Y según el terreno actual
+            Vector3 pos = a.getPosicion();
+            double terrainH = mundo.getHeightAt(pos.x, pos.z);
+            if (terrainH != Double.NEGATIVE_INFINITY) {
+                // Colocar animal sobre el terreno
+                a.setPosicion(new Vector3(pos.x, terrainH + 5.0, pos.z));
+            }
+            mundo.addAnimal(a);
+        }
+        
+        // Reanudar simulación
+        controles.setPaused(false);
+        
+        JOptionPane.showMessageDialog(parentFrame, "Partida cargada: " + loadFile.getName() + "\n" + state.animals.size() + " animales restaurados", "Cargado", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void attemptSpawn(Controles controles) {
@@ -816,8 +894,8 @@ public class RenderPanel extends JPanel {
         long seed = System.currentTimeMillis();
         Renderable r = EcosistemaApp.createAnimalOfType(type, pos, seed);
         if (r != null) {
-            if (r instanceof Animal) {
-                mundo.addAnimal((Animal) r);
+            if (r instanceof entities.BaseAnimal) {
+                mundo.addAnimal((entities.BaseAnimal) r);
             } else {
                 mundo.addEntity(r);
             }

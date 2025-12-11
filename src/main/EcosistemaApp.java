@@ -29,6 +29,12 @@ public class EcosistemaApp {
         // Use Mundo to manage entities and animals
         simulation.Mundo mundo = new simulation.Mundo();
         mundoRef = mundo;
+        
+        // Set environment seed for reproducibility
+        long envSeed = System.currentTimeMillis() + 12345;
+        mundo.setEnvironmentSeed(envSeed);
+        mundo.setEnvironmentCreatedAt(System.currentTimeMillis());
+        
         // Expand terrain: 160x160 grid, 8-unit scale = 1280 world units
         mundo.addEntity(new Terreno(160, 160, 8.0, 12345L, new Color(60, 140, 60)));
 
@@ -41,6 +47,8 @@ public class EcosistemaApp {
     // Give controls and panel a reference to the world so they can save/load animals
     controles.setMundoAndCorrectPosition(mundo);
     panel.setMundo(mundo);
+    panel.setCamera(cam);
+    panel.setParentFrame(frame);
         // Add listeners to the render panel so it receives mouse and key events
         panel.addMouseMotionListener(controles);
         panel.addKeyListener(controles);
@@ -76,6 +84,7 @@ public class EcosistemaApp {
 
     // Start the simulation thread that mutates animals deterministically
     simulation.Simulador sim = new simulation.Simulador(mundo, 5555L);
+    panel.setSimulador(sim);
     sim.start();
     }
 
@@ -123,8 +132,8 @@ public class EcosistemaApp {
                 usedPositions.add(pos);
                 Renderable animal = createAnimalOfType(animalType, pos, seed);
                 if (animal != null) {
-                    if (animal instanceof Animal) {
-                        mundo.addAnimal((Animal) animal);
+                    if (animal instanceof entities.BaseAnimal) {
+                        mundo.addAnimal((entities.BaseAnimal) animal);
                     } else {
                         mundo.addEntity(animal);
                     }

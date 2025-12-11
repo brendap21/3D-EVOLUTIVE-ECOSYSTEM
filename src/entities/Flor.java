@@ -50,6 +50,10 @@ public class Flor implements Renderable, Collidable {
         generateFlower();
     }
 
+    public void setCreationTime(long creationTime) {
+        this.creationTime = creationTime;
+    }
+
     private void generateFlower() {
         Random r = new Random(seed);
         // 4 pétalos en cruz

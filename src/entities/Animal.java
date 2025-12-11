@@ -52,7 +52,6 @@ public class Animal implements Renderable {
         this.voxels = new ArrayList<>();
         generateFromSeed(seed);
         initializeSpawnAnimation();
-        System.out.println("Animal creado - spawn animation iniciada. Particles: " + spawnParticles.size());
     }
 
     // Additional constructor used for deserialization
@@ -181,46 +180,7 @@ public class Animal implements Renderable {
         return new math.Vector3(maxX, maxY, maxZ);
     }
 
-    // Simple serialization format (line-based):
-    // seed|x,y,z|r,g,b|voxelSize|ox:oy:oz,ox:oy:oz,...
-    public String serialize(){
-        StringBuilder sb = new StringBuilder();
-        sb.append(seed).append('|');
-        sb.append((int)posicion.x).append(',').append((int)posicion.y).append(',').append((int)posicion.z).append('|');
-        sb.append(color.getRed()).append(',').append(color.getGreen()).append(',').append(color.getBlue()).append('|');
-        sb.append(voxelSize).append('|');
-        for(int i=0;i<voxels.size();i++){
-            Vector3 v = voxels.get(i);
-            sb.append((int)v.x).append(':').append((int)v.y).append(':').append((int)v.z);
-            if(i<voxels.size()-1) sb.append(',');
-        }
-        return sb.toString();
-    }
 
-    // Parse the simple serialization format and return an Animal.
-    public static Animal deserialize(String line){
-        try{
-            String[] parts = line.split("\\|");
-            if(parts.length < 5) return null;
-            long seed = Long.parseLong(parts[0]);
-            String[] posParts = parts[1].split(",");
-            Vector3 pos = new Vector3(Double.parseDouble(posParts[0]), Double.parseDouble(posParts[1]), Double.parseDouble(posParts[2]));
-            String[] colParts = parts[2].split(",");
-            Color col = new Color(Integer.parseInt(colParts[0]), Integer.parseInt(colParts[1]), Integer.parseInt(colParts[2]));
-            int vsize = Integer.parseInt(parts[3]);
-            List<Vector3> vox = new ArrayList<>();
-            if(parts[4].length() > 0){
-                String[] offs = parts[4].split(",");
-                for(String o : offs){
-                    String[] xyz = o.split(":");
-                    vox.add(new Vector3(Double.parseDouble(xyz[0]), Double.parseDouble(xyz[1]), Double.parseDouble(xyz[2])));
-                }
-            }
-            return new Animal(pos, seed, col, vsize, vox);
-        }catch(Exception ex){
-            return null;
-        }
-    }
 
     @Override
     public void update(){
@@ -230,7 +190,6 @@ public class Animal implements Renderable {
                 spawnProgress = 1.0;
                 isSpawning = false;
                 spawnParticles.clear();
-                System.out.println("Spawn animation completada!");
             }
         }
     }
@@ -254,7 +213,6 @@ public class Animal implements Renderable {
     }
     
     private void renderSpawnAnimation(SoftwareRenderer renderer, Camera cam) {
-        System.out.println("Rendering spawn animation - progress: " + spawnProgress);
         // Fase 1 (0.0 - 0.5): Partículas en espiral convergiendo
         if (spawnProgress < 0.5) {
             double particlePhase = spawnProgress / 0.5;
@@ -343,4 +301,5 @@ public class Animal implements Renderable {
     }
 
     public Vector3 getPosicion() { return posicion; }
+    public void setPosicion(Vector3 pos) { this.posicion = pos; }
 }

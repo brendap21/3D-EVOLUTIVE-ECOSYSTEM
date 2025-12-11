@@ -62,6 +62,11 @@ public class Arbol implements Renderable, Collidable {
         generateStructure((int)(trunkRadius * 0.5), (int)(trunkHeight * 0.5), (int)(canopyRadius * 0.5));
     }
 
+    // Ajustar el tiempo de creación para conservar el progreso de crecimiento al recargar
+    public void setCreationTime(long creationTime) {
+        this.creationTime = creationTime;
+    }
+
     private void generateStructure(int trunkRadius, int trunkHeight, int canopyRadius) {
         Random r = new Random(seed);
         int trunkVoxelRadius = Math.max(1, trunkRadius / voxelSize);

@@ -1,6 +1,7 @@
 package entities;
 
 import main.Renderable;
+import main.EcosistemaApp;
 import render.SoftwareRenderer;
 import math.Vector3;
 import math.Camera;
@@ -931,6 +932,7 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     }
     
     public Vector3 getPosicion() { return posicion; }
+    public void setPosicion(Vector3 pos) { this.posicion = pos; }
     
     public void setHovered(boolean hovered) { this.isHovered = hovered; }
     public boolean isHovered() { return isHovered; }
@@ -944,6 +946,37 @@ public abstract class BaseAnimal implements Renderable, Collidable {
     public int getAnimalId() { return animalId; }
     
     public int getGrowthPhase() { return growthPhase; }
+    public void setGrowthPhase(int phase) {
+        this.growthPhase = Math.max(1, Math.min(3, phase));
+        this.phaseStartTime = System.currentTimeMillis();
+        applyPhaseVisuals();
+    }
+
+    // Simple serialization for save/load of BaseAnimal-derived species
+    public String serializeState() {
+        return getSpeciesType() + "|" + seed + "|" + posicion.x + "," + posicion.y + "," + posicion.z + "|" + growthPhase;
+    }
+
+    public static BaseAnimal deserializeState(String line) {
+        try {
+            String[] parts = line.split("\\|");
+            if (parts.length < 4) return null;
+            int type = Integer.parseInt(parts[0]);
+            long seed = Long.parseLong(parts[1]);
+            String[] posParts = parts[2].split(",");
+            Vector3 pos = new Vector3(Double.parseDouble(posParts[0]), Double.parseDouble(posParts[1]), Double.parseDouble(posParts[2]));
+            int phase = Integer.parseInt(parts[3]);
+            Renderable created = EcosistemaApp.createAnimalOfType(type, pos, seed);
+            if (created instanceof BaseAnimal) {
+                BaseAnimal a = (BaseAnimal) created;
+                a.setGrowthPhase(phase);
+                return a;
+            }
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
     public double getPhaseTimer() { 
         if (phaseStartTime == 0) return 0.0;
         long currentTime = System.currentTimeMillis();
