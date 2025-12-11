@@ -449,19 +449,3 @@ Todas las amplitudes se escalan con `voxelSize` del animal:
 6. **Documentación en código**: Cada método render() incluye comentarios sobre qué animaciones se aplican.
 
 ---
-
-## MEJORAS FUTURAS POSIBLES
-
-- [ ] Expresiones emocionales dinámicas (miedo, alegría, ira)
-- [ ] Interacciones entre animales (seguir, huir, atacar)
-- [ ] Cansancio progresivo (animaciones más lentas)
-- [ ] Daño visual (deformación de forma, cambio de color)
-- [ ] Animaciones de reproducción y cuidado de crías
-- [ ] Efectos de partículas (saliva, chispas, etc.)
-- [ ] Sonidos sincronizados (pasos, lamentos, vocalizaciones)
-
----
-
-**Documento generado**: Diciembre 2025
-**Proyecto**: 3D Evolutive Ecosystem
-**Especialidad**: Computer Graphics (Gráficas por Computadora)
