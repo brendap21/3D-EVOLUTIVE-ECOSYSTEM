@@ -7,64 +7,13 @@ import java.awt.image.BufferedImage;
 import simulation.Mundo;
 import ui.Controles;
 
-/**
- * ============================================================================================
- * RenderThread - Hilo de renderizado (bucle principal de dibujo)
- * ============================================================================================
- * 
- * PROPÓSITO:
- * Ejecuta el bucle de renderizado en un hilo separado del AWT Event Dispatch Thread.
- * Esto permite que la UI responda mientras se dibuja la escena 3D.
- * 
- * RESPONSABILIDADES:
- * 1. Actualizar controles (movimiento de cámara basado en input)
- * 2. Obtener snapshot thread-safe de todas las entidades del mundo
- * 3. Actualizar animaciones de entidades (spawn effects, movimiento)
- * 4. Llamar al RenderPanel para dibujar la escena
- * 5. Controlar framerate (~143 FPS con sleep de 7ms)
- * 
- * CONCEPTOS IMPLEMENTADOS:
- * 1. MULTI-THREADING:
- *    - Separación de lógica de render del Event Dispatch Thread
- *    - Evita congelar la UI durante operaciones costosas
- *    - Thread.sleep() para limitar framerate y reducir uso de CPU
- * 
- * 2. PAUSA ABSOLUTA:
- *    - Cuando isPaused() o isAnimalPanelOpen() = true:
- *      * NO actualizar controles (cámara congelada)
- *      * NO actualizar entidades (animaciones congeladas)
- *      * SÍ seguir dibujando (para mostrar menú de pausa)
- *    - Implementa congelamiento completo del juego
- * 
- * 3. SNAPSHOT PATTERN:
- *    - mundo.snapshotEntities() crea copia defensiva de la lista
- *    - Evita ConcurrentModificationException si otra thread modifica el mundo
- *    - Thread-safety esencial en arquitecturas multi-hilo
- * 
- * 4. FRAME TIMING:
- *    - 7ms sleep = ~143 FPS máximo
- *    - Balance entre fluidez visual y uso de CPU
- *    - 60 FPS = 16.67ms, 143 FPS = 7ms (muy fluido para movimiento de cámara)
- * 
- * ============================================================================================
- */
 public class RenderThread extends Thread {
-    // Referencias a los componentes principales del sistema
-    private RenderPanel panel;        // Panel donde se dibuja (contiene el backBuffer)
-    private Mundo mundo;              // Contenedor de todas las entidades
-    private Camera cam;               // Cámara 3D (posición + orientación)
-    private Controles controles;      // Sistema de input (teclado + mouse)
-    private DisplayPanel displayPanel; // Panel para mostrar imagen
+    private RenderPanel panel;
+    private Mundo mundo;
+    private Camera cam;
+    private Controles controles;
+    private DisplayPanel displayPanel;
 
-    /**
-     * Constructor: Inicializa el hilo de renderizado con referencias a componentes.
-     * 
-     * @param panel Panel de renderizado (donde se dibuja el backBuffer)
-     * @param mundo Mundo con todas las entidades a dibujar
-     * @param cam Cámara 3D (define punto de vista)
-     * @param controles Sistema de controles (para actualizar posición/orientación cámara)
-     * @param displayPanel Panel para mostrar la imagen renderizada
-     */
     public RenderThread(RenderPanel panel, Mundo mundo, Camera cam, Controles controles, DisplayPanel displayPanel){
         this.panel = panel;
         this.mundo = mundo;
@@ -73,25 +22,6 @@ public class RenderThread extends Thread {
         this.displayPanel = displayPanel;
     }
 
-    /**
-     * ========================================================================================
-     * run - Bucle principal de renderizado (ejecuta mientras el programa esté activo)
-     * ========================================================================================
-     * 
-     * FLUJO DEL BUCLE:
-     * 1. Verificar estado de pausa (isPaused o isAnimalPanelOpen)
-     * 2. Si NO está pausado:
-     *    a. Actualizar controles (mover/rotar cámara según input)
-     *    b. Actualizar entidades (animaciones, movimiento)
-     * 3. Obtener snapshot thread-safe de entidades
-     * 4. Llamar a panel.render() para dibujar la escena
-     * 5. Dormir 7ms para limitar a ~143 FPS
-     * 6. Repetir infinitamente
-     * 
-     * PAUSA ABSOLUTA:
-     * Cuando shouldFreeze = true, NO se actualizan controles ni entidades.
-     * Solo se dibuja la escena (para mostrar menú de pausa y últim frame congelado).
-     */
     @Override
     public void run(){
         while(true){

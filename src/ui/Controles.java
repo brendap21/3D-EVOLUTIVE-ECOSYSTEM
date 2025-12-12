@@ -15,8 +15,6 @@ import simulation.Mundo;
 import java.io.File;
 import math.Vector3;
 
-// Controles mejorados: mouse-lock (centro + oculto) usando Robot y movimiento WASD
-// relativo a la dirección de la cámara (comportamiento tipo Minecraft).
 public class Controles extends KeyAdapter implements MouseMotionListener {
 
     private Camera cam;

@@ -1,5 +1,4 @@
 package entities;
 
-// Reexport the main.Renderable interface to avoid duplicate definitions.
-// Any code importing entities.Renderable will now refer to the single canonical interface.
+// Alias hacia main.Renderable para evitar definiciones duplicadas.
 public interface Renderable extends main.Renderable {}

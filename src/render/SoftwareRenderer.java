@@ -90,45 +90,7 @@ public class SoftwareRenderer {
         return result;
     }
 
-    // ============================================================================================
-    // GENERADORES DE PRIMITIVAS 3D (CUBOS Y CILINDROS)
-    // ============================================================================================
-    // Métodos públicos para que las entidades generen arreglos de vértices de primitivas 3D.
-    // Estas primitivas son requisitos del proyecto.
-    
-    /**
-     * ========================================================================================
-     * getCubeVertices - Genera los 8 vértices de un CUBO (PRIMITIVA 3D)
-     * ========================================================================================
-     * 
-     * GEOMETRÍA DEL CUBO:
-     * - 8 vértices (esquinas)
-     * - 12 aristas
-     * - 6 caras cuadradas
-     * - Cada cara se renderiza como 2 triángulos → 12 triángulos totales
-     * 
-     * TOPOLOGÍA DE VÉRTICES:
-     *        v3 -------- v2
-     *       /|          /|
-     *      / |         / |      Y
-     *     v7 -------- v6 |      |
-     *     |  v0 ------|--v1     +-- X
-     *     | /         | /      /
-     *     |/          |/      Z
-     *     v4 -------- v5
-     * 
-     * TRANSFORMACIONES APLICADAS:
-     * 1. ESCALA: tam/2 define distancia del centro a cara
-     * 2. ROTACIÓN: rotY rota alrededor del eje Y usando matriz 2D:
-     *    x' = x*cos(θ) - z*sin(θ)
-     *    z' = x*sin(θ) + z*cos(θ)
-     * 3. TRASLACIÓN: pos desplaza el cubo en el mundo
-     * 
-     * @param pos Centro del cubo en world space
-     * @param tam Longitud de cada arista
-     * @param rotY Ángulo de rotación en radianes alrededor del eje Y
-     * @return Array de 8 vértices en world space
-     */
+    // Primitivas básicas: cubo y cilindro
     public Vector3[] getCubeVertices(Vector3 pos, int tam, double rotY){
         double half = tam / 2.0;
         Vector3[] vertices = new Vector3[8];
@@ -156,41 +118,6 @@ public class SoftwareRenderer {
         return vertices;
     }
 
-    /**
-     * ========================================================================================
-     * getCylinderTopVertices - Genera vértices del círculo superior del CILINDRO
-     * ========================================================================================
-     * 
-     * GEOMETRÍA DEL CILINDRO:
-     * - Primitiva 3D definida por 2 círculos paralelos (tapas) y superficie lateral
-     * - Círculo superior: Y = pos.y + altura/2
-     * - Círculo inferior: Y = pos.y - altura/2
-     * - Radio: distancia del eje a la superficie
-     * 
-     * GENERACIÓN PROCEDURAL:
-     * El círculo se aproxima con un polígono de N lados (N=20).
-     * 
-     * Para cada vértice i en [0, sides):
-     *   angle = 2π * i / sides  (divide círculo en partes iguales)
-     *   x = radio * cos(angle)  (coordenada X en círculo)
-     *   z = radio * sin(angle)  (coordenada Z en círculo)
-     * 
-     * TRANSFORMACIONES:
-     * 1. GENERACIÓN: Círculo en plano XZ usando fórmulas paramétricas
-     * 2. ROTACIÓN Y: Rota círculo alrededor del eje Y
-     * 3. TRASLACIÓN: pos + (0, altura/2, 0)
-     * 
-     * RENDERIZADO:
-     * - La tapa se renderiza como abanico de triángulos (triangle fan)
-     * - Centro conectado a cada par de vértices consecutivos
-     * - 20 triángulos por tapa (20 lados)
-     * 
-     * @param pos Centro del cilindro
-     * @param radio Radio de las tapas circulares
-     * @param altura Distancia entre tapas
-     * @param rotY Rotación del cilindro alrededor del eje Y
-     * @return Array de 20 vértices formando el círculo superior
-     */
     public Vector3[] getCylinderTopVertices(Vector3 pos, int radio, int altura, double rotY){
         int sides = 20; // Aproximación poligonal (20-gon ≈ círculo)
         Vector3[] top = new Vector3[sides];
@@ -219,19 +146,6 @@ public class SoftwareRenderer {
         return top;
     }
 
-    /**
-     * ========================================================================================
-     * getCylinderBottomVertices - Genera vértices del círculo inferior del CILINDRO
-     * ========================================================================================
-     * 
-     * Idéntico a getCylinderTopVertices() pero con Y = pos.y - altura/2
-     * 
-     * @param pos Centro del cilindro
-     * @param radio Radio de las tapas circulares
-     * @param altura Distancia entre tapas
-     * @param rotY Rotación del cilindro alrededor del eje Y
-     * @return Array de 20 vértices formando el círculo inferior
-     */
     public Vector3[] getCylinderBottomVertices(Vector3 pos, int radio, int altura, double rotY){
         int sides = 20; // Aproximación poligonal
         Vector3[] bottom = new Vector3[sides];
@@ -283,13 +197,6 @@ public class SoftwareRenderer {
      * - Reduce tearing visual
      * - Permite multi-threading seguro
      * 
-     * SINCRONIZACIÓN:
-     * - swapBuffers() es synchronized para evitar race conditions
-     * - RenderThread dibuja en backBuffer mientras AWT muestra frontBuffer
-     * 
-     * @param ancho Ancho de la imagen en píxeles
-     * @param alto Alto de la imagen en píxeles
-     */
     public SoftwareRenderer(int ancho, int alto) {
         this.ancho = ancho;
         this.alto = alto;

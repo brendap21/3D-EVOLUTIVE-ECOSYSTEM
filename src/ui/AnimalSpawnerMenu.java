@@ -1,37 +1,27 @@
 package ui;
 
-/**
- * Gestiona el estado del menú de generación de animales.
- * Implementa la lógica para abrir/cerrar el menú, navegar entre opciones y seleccionar tipo de animal.
- * 
- * CONCEPTOS IMPLEMENTADOS:
- * - Máquina de estados (menú cerrado, menú abierto, esperando posición)
- * - Navegación con teclado (arrow keys para seleccionar opción)
- * - Validación de entrada
- */
 public class AnimalSpawnerMenu {
     
     // Estado del menú
     public enum MenuState {
-        CLOSED,              // Menú cerrado
-        OPEN,                // Menú abierto, eligiendo tipo
-        WAITING_FOR_POSITION // Tipo seleccionado, esperando click en terreno
+        CLOSED,
+        OPEN,
+        WAITING_FOR_POSITION
     }
     
-    // Opciones de animales
     public static final String[] ANIMAL_OPTIONS = {
-        "Random",      // 0
-        "Tipo 1",      // 1
-        "Tipo 2",      // 2
-        "Tipo 3",      // 3
-        "Tipo 4",      // 4
-        "Tipo 5",      // 5
-        "Tipo 6",      // 6
-        "Tipo 7",      // 7
-        "Tipo 8",      // 8
-        "Tipo 9",      // 9
-        "Tipo 10",     // 10
-        "Depredador"   // 11
+        "Random",
+        "Tipo 1",
+        "Tipo 2",
+        "Tipo 3",
+        "Tipo 4",
+        "Tipo 5",
+        "Tipo 6",
+        "Tipo 7",
+        "Tipo 8",
+        "Tipo 9",
+        "Tipo 10",
+        "Depredador"
     };
     
     private MenuState state = MenuState.CLOSED;
@@ -106,8 +96,6 @@ public class AnimalSpawnerMenu {
     public void cancel() {
         close();
     }
-    
-    // Getters
     public MenuState getState() { return state; }
     public int getSelectedIndex() { return selectedIndex; }
     public int getSelectedAnimalType() { return selectedAnimalType; }
