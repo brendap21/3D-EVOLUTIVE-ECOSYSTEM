@@ -17,8 +17,6 @@ import ui.Controles;
  * RESPONSABILIDADES:
  * 1. Evolucionar animales (cambios de fase de crecimiento)
  * 2. Aplicar mutaciones aleatorias (color, tamaño, velocidad)
- * 3. Gestionar muerte por hambre/edad
- * 4. Respetar el sistema de PAUSA ABSOLUTA
  * 
  * CONCEPTOS IMPLEMENTADOS:
  * 1. DETERMINISMO:
