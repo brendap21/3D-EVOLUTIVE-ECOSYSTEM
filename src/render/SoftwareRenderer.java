@@ -197,6 +197,7 @@ public class SoftwareRenderer {
      * - Reduce tearing visual
      * - Permite multi-threading seguro
      * 
+    */
     public SoftwareRenderer(int ancho, int alto) {
         this.ancho = ancho;
         this.alto = alto;
